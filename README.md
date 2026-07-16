@@ -121,6 +121,13 @@ signing credentials. See [VERIFICATION.md](VERIFICATION.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for project
 processes.
 
+## Marketing site
+
+The static marketing site lives in [`site/`](site/) and publishes to
+`https://jordancalhoun.github.io/swiftpkg/`. Enable **GitHub Actions** as the
+Pages source in repository Settings → Pages, then run the **Deploy marketing
+site** workflow once. Future changes to `site/` on `main` deploy automatically.
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
