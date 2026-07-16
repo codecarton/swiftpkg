@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100/
+.Trashes/
+Icon
+
+# SwiftPM and Xcode build output
+.build/
+.xcodebuild/
+build/
+DerivedData/
+
+# Xcode user and workspace state
+xcuserdata/
+**/xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+**/xcshareddata/swiftpm/
+
+# Xcode archives and symbols
+*.xcarchive
+*.dSYM
+*.dSYM.zip

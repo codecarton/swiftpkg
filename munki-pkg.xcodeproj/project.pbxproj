@@ -18,6 +18,10 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
+/* Begin PBXBuildFile section */
+		9E13F8733004711C000A60D7 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 9E13F8753004711C000A60D7 /* Yams */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		9E13F8693004711C000A60D7 /* munki-pkg */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "munki-pkg"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -35,6 +39,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9E13F8733004711C000A60D7 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +82,7 @@
 			);
 			name = "munki-pkg";
 			packageProductDependencies = (
+				9E13F8753004711C000A60D7 /* Yams */,
 			);
 			productName = "munki-pkg";
 			productReference = 9E13F8693004711C000A60D7 /* munki-pkg */;
@@ -107,6 +113,9 @@
 			mainGroup = 9E13F8603004711C000A60D7;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */,
+			);
 			productRefGroup = 9E13F86A3004711C000A60D7 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -295,6 +304,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jpsim/Yams.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.2.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9E13F8753004711C000A60D7 /* Yams */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */;
+			productName = Yams;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 9E13F8613004711C000A60D7 /* Project object */;
 }
