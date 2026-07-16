@@ -124,7 +124,7 @@ processes.
 ## Marketing site
 
 The static marketing site lives in [`site/`](site/) and publishes to
-`https://jordancalhoun.github.io/swiftpkg/`. Enable **GitHub Actions** as the
+`https://codecarton.github.io/swiftpkg/`. Enable **GitHub Actions** as the
 Pages source in repository Settings → Pages, then run the **Deploy marketing
 site** workflow once. Future changes to `site/` on `main` deploy automatically.
 
