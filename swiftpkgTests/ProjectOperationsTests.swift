@@ -3,7 +3,8 @@ import Testing
 @testable import swiftpkg
 
 struct ProjectOperationsTests {
-    @Test func `creates a project template`() throws {
+    @Test("creates a project template")
+    func createsProjectTemplate() throws {
         let temporary = try TemporaryDirectory()
         defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
@@ -22,7 +23,8 @@ struct ProjectOperationsTests {
         #expect(FileManager.default.itemExists(at: project.appendingPathComponent(".gitignore")))
     }
 
-    @Test func `syncs modes and creates empty directories from BOM`() throws {
+    @Test("syncs modes and creates empty directories from BOM")
+    func syncsModesAndCreatesEmptyDirectoriesFromBOM() throws {
         let temporary = try TemporaryDirectory()
         defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
@@ -44,7 +46,8 @@ struct ProjectOperationsTests {
         #expect(permissions == 0o644)
     }
 
-    @Test func `exports BOM output through lsbom runner`() throws {
+    @Test("exports BOM output through lsbom runner")
+    func exportsBOMOutputThroughLsbomRunner() throws {
         let temporary = try TemporaryDirectory()
         defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)

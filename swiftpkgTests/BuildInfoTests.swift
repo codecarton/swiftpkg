@@ -3,7 +3,8 @@ import Testing
 @testable import swiftpkg
 
 struct BuildInfoTests {
-    @Test func `defaults remove spaces and provide upstream values`() throws {
+    @Test("defaults remove spaces and provide upstream values")
+    func defaultsRemoveSpacesAndProvideUpstreamValues() throws {
         let project = URL(fileURLWithPath: "/tmp/My Project")
         let info = BuildInfo.defaults(for: project)
 
@@ -14,8 +15,8 @@ struct BuildInfoTests {
         #expect(info.bool("distribution_style") == false)
     }
 
-    @Test(arguments: [BuildInfoFormat.json, .plist, .yaml])
-    func `loads supported formats and substitutes version`(_ format: BuildInfoFormat) throws {
+    @Test("loads supported formats and substitutes version", arguments: [BuildInfoFormat.json, .plist, .yaml])
+    func loadsSupportedFormatsAndSubstitutesVersion(_ format: BuildInfoFormat) throws {
         let temporary = try TemporaryDirectory()
         defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
@@ -38,7 +39,8 @@ struct BuildInfoTests {
         #expect(loaded.string("identifier") == "com.example.project")
     }
 
-    @Test func `rejects multiple build info files`() throws {
+    @Test("rejects multiple build info files")
+    func rejectsMultipleBuildInfoFiles() throws {
         let temporary = try TemporaryDirectory()
         defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
@@ -52,7 +54,8 @@ struct BuildInfoTests {
         }
     }
 
-    @Test func `rejects illegal build info values`() throws {
+    @Test("rejects illegal build info values")
+    func rejectsIllegalBuildInfoValues() throws {
         let info = BuildInfo(values: [
             "name": "Project.pkg",
             "version": "1.0",

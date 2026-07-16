@@ -2,12 +2,14 @@ import Testing
 @testable import swiftpkg
 
 struct CLITests {
-    @Test func `release version is semantic`() {
+    @Test("release version is semantic")
+    func releaseVersionIsSemantic() {
         #expect(swiftpkgVersion.split(separator: ".").count == 3)
         #expect(swiftpkgVersion.split(separator: ".").allSatisfy { Int($0) != nil })
     }
 
-    @Test func `parses supported options`() {
+    @Test("parses supported options")
+    func parsesSupportedOptions() {
         let result = CLIParser.parse([
             "--create", "--json", "--quiet", "--import", "input.pkg", "Project"
         ])
@@ -23,15 +25,16 @@ struct CLITests {
         #expect(options.projectDirectory == "Project")
     }
 
-    @Test(arguments: [["--json", "--yaml"], ["one", "two"]])
-    func `rejects invalid argument combinations`(_ arguments: [String]) {
+    @Test("rejects invalid argument combinations", arguments: [["--json", "--yaml"], ["one", "two"]])
+    func rejectsInvalidArgumentCombinations(_ arguments: [String]) {
         guard case .failure = CLIParser.parse(arguments) else {
             Issue.record("Expected parser failure for \(arguments)")
             return
         }
     }
 
-    @Test func `accepts import equals syntax`() {
+    @Test("accepts import equals syntax")
+    func acceptsImportEqualsSyntax() {
         guard case .options(let options) = CLIParser.parse(["--import=existing.pkg", "Project"]) else {
             Issue.record("Expected options result")
             return
@@ -39,7 +42,8 @@ struct CLITests {
         #expect(options.importPackage == "existing.pkg")
     }
 
-    @Test func `reports missing import argument`() {
+    @Test("reports missing import argument")
+    func reportsMissingImportArgument() {
         guard case .failure(let message) = CLIParser.parse(["--import"]) else {
             Issue.record("Expected parser failure")
             return
