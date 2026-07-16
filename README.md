@@ -1,65 +1,53 @@
 # swiftpkg
 
-Swift implementation of [`munki-pkg`](https://github.com/munki/munki-pkg), a macOS command-line tool for building Apple installer packages from version-control-friendly project directories.
+`swiftpkg` is a macOS command-line tool for building Apple installer packages
+from version-control-friendly project directories. It is a Swift implementation
+of [`munki-pkg`](https://github.com/munki/munki-pkg).
 
-The tool builds standard flat packages with Apple's `pkgbuild` and can create distribution-style packages with `productbuild`.
+## Install for Mac administrators
 
-## Requirements
+Download `swiftpkg-<version>-universal.pkg` and `SHA256SUMS` from the matching
+GitHub Release. The installer is Universal 2 (Apple silicon and Intel),
+Developer ID signed, and notarized; it supports macOS 13 and later.
 
-- macOS
-- Xcode and the macOS Command Line Tools
-- Swift 6 toolchain
-- Apple's `pkgbuild`, `productbuild`, `pkgutil`, `ditto`, and `lsbom` tools
-
-YAML support is provided by the Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams).
-
-## Build
-
-Using Swift Package Manager:
+Verify the download before installation:
 
 ```sh
-swift build -c release
+shasum -a 256 -c SHA256SUMS
+spctl --assess --type install --verbose=4 swiftpkg-<version>-universal.pkg
+sudo installer -pkg swiftpkg-<version>-universal.pkg -target /
+swiftpkg --version
 ```
 
-The binary is created at:
+The installer places the executable at `/usr/local/bin/swiftpkg`. Deploy that
+same installer through Munki, Jamf Pro, or another management system; do not
+repackage the executable. Upgrades replace that path. To uninstall, remove
+`/usr/local/bin/swiftpkg` and, if desired, the `org.swiftpkg.cli` installer
+receipt after confirming it is not needed for inventory.
 
-```text
-.build/release/swiftpkg
-```
+`swiftpkg` requires macOS, Xcode Command Line Tools, and Apple's `pkgbuild`,
+`productbuild`, `pkgutil`, `ditto`, and `lsbom` tools. Package signing and
+notarization additionally require the appropriate Apple credentials on the
+build host.
 
-The Xcode project can also be built with:
-
-```sh
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
-```
-
-## Usage
+## Use
 
 Build a project:
 
 ```sh
-.build/release/swiftpkg path/to/project
+swiftpkg path/to/project
 ```
 
-Create a project template:
+Create a project template, import an existing package, or apply tracked BOM
+metadata:
 
 ```sh
-.build/release/swiftpkg --create path/to/project
+swiftpkg --create path/to/project
+swiftpkg --import path/to/existing.pkg path/to/project
+swiftpkg --sync path/to/project
 ```
 
-Import an existing package:
-
-```sh
-.build/release/swiftpkg --import path/to/existing.pkg path/to/project
-```
-
-Apply tracked BOM metadata without building:
-
-```sh
-.build/release/swiftpkg --sync path/to/project
-```
-
-Useful options include:
+Useful options:
 
 ```text
 --json                 Use JSON build-info
@@ -74,7 +62,7 @@ Useful options include:
 --version              Show the tool version
 ```
 
-## Project Layout
+## Project layout
 
 ```text
 project/
@@ -87,28 +75,52 @@ project/
     Bom.txt             # optional tracked ownership and mode metadata
 ```
 
-If `payload/` is absent, a payload-free package is created. An empty `payload/` creates a package that installs no files but still leaves an installer receipt.
+If `payload/` is absent, a payload-free package is created. An empty
+`payload/` creates a package that installs no files but still leaves an
+installer receipt. Supported build-info settings include `name`, `identifier`,
+`version`, `install_location`, `ownership`, `postinstall_action`,
+`distribution_style`, `title`, `signing_info`, and `notarization_info`.
 
-Supported build-info formats are plist, JSON, and YAML. Common settings include `name`, `identifier`, `version`, `install_location`, `ownership`, `postinstall_action`, `distribution_style`, `title`, `signing_info`, and `notarization_info`.
-
-## Verification
-
-Run the unit tests:
+## Build from source
 
 ```sh
+swift build -c release
+.build/release/swiftpkg --version
 swift test
-```
-
-Run the repeatable integration loop:
-
-```sh
 ./scripts/verify-loop.sh
 ```
 
-The integration loop builds the release binary and verifies nested payloads, BOM export, package import, installer script handling, JSON and YAML projects, payload-free packages, empty payloads, and distribution-style packages. It uses a temporary workspace and removes it on exit.
+The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
+provides YAML support. The Xcode project also builds with:
 
-Additional verification details are in [`VERIFICATION.md`](VERIFICATION.md).
+```sh
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
+```
 
-## Compatibility
+## Maintainer releases
 
-This implementation follows the command-line behavior and package project model of the upstream Python `munki-pkg` implementation. Apple package creation, signing, notarization, and stapling remain dependent on the macOS tools and credentials available on the host.
+`VERSION` and `swiftpkg/Version.swift` are the release-version source of truth
+and must match before a `v<version>` tag is created. On a clean, trusted macOS
+release machine with the certificates and notary profile installed:
+
+```sh
+APP_SIGN_IDENTITY='Developer ID Application: Example (TEAMID)' \
+INSTALLER_SIGN_IDENTITY='Developer ID Installer: Example (TEAMID)' \
+NOTARY_PROFILE='swiftpkg-notary' \
+./scripts/release.sh
+```
+
+The script runs tests, builds a Universal 2 executable, signs it, creates,
+notarizes, staples, and validates the installer, then writes artifacts and
+`SHA256SUMS` to `dist/`. To publish a GitHub Release after creating and pushing
+the matching tag, add `GH_PUBLISH=1 GITHUB_REPOSITORY=owner/repo`; this requires
+the GitHub CLI to be authenticated on the release Mac.
+
+GitHub Actions validates pull requests and tags but intentionally has no Apple
+signing credentials. See [VERIFICATION.md](VERIFICATION.md),
+[CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for project
+processes.
+
+## License
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).

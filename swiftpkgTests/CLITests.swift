@@ -2,6 +2,11 @@ import Testing
 @testable import swiftpkg
 
 struct CLITests {
+    @Test func `release version is semantic`() {
+        #expect(swiftpkgVersion.split(separator: ".").count == 3)
+        #expect(swiftpkgVersion.split(separator: ".").allSatisfy { Int($0) != nil })
+    }
+
     @Test func `parses supported options`() {
         let result = CLIParser.parse([
             "--create", "--json", "--quiet", "--import", "input.pkg", "Project"

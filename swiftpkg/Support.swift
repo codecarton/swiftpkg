@@ -1,8 +1,6 @@
 import Darwin
 import Foundation
 
-let swiftpkgVersion = "1.0"
-
 enum MunkiPkgError: Error, CustomStringConvertible {
     case message(String)
 

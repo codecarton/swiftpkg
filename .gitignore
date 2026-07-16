@@ -11,6 +11,7 @@ Icon
 .xcodebuild/
 build/
 DerivedData/
+dist/
 
 # Xcode user and workspace state
 xcuserdata/
