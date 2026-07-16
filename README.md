@@ -1,4 +1,11 @@
+![swiftpkg — Build better macOS installer packages](site/assets/og.png)
+
 # swiftpkg
+
+[![CI](https://github.com/codecarton/swiftpkg/actions/workflows/ci.yml/badge.svg)](https://github.com/codecarton/swiftpkg/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/codecarton/swiftpkg?display_name=release&sort=semver)](https://github.com/codecarton/swiftpkg/releases)
+[![License](https://img.shields.io/github/license/codecarton/swiftpkg)](LICENSE)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
 
 `swiftpkg` is a macOS command-line tool for building Apple installer packages
 from version-control-friendly project directories. It is a Swift implementation
