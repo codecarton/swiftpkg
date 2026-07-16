@@ -1,0 +1,3 @@
+/* Keep every open lid plane in front of the package faces. */
+.package-cube .cube-flap { z-index: 4; }
+.package-cube .flap-front { z-index: 5; }
