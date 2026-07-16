@@ -1,6 +1,6 @@
 import Foundation
 
-enum MunkiPkg {
+enum SwiftPkg {
     static func run(
         arguments: [String],
         runner: any ProcessRunning = SystemProcessRunner(),

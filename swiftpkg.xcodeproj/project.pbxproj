@@ -23,13 +23,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		9E13F8693004711C000A60D7 /* munki-pkg */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "munki-pkg"; sourceTree = BUILT_PRODUCTS_DIR; };
+		9E13F8693004711C000A60D7 /* swiftpkg */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = swiftpkg; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		9E13F86B3004711C000A60D7 /* munki-pkg */ = {
+		9E13F86B3004711C000A60D7 /* swiftpkg */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "munki-pkg";
+			path = swiftpkg;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -49,7 +49,7 @@
 		9E13F8603004711C000A60D7 = {
 			isa = PBXGroup;
 			children = (
-				9E13F86B3004711C000A60D7 /* munki-pkg */,
+				9E13F86B3004711C000A60D7 /* swiftpkg */,
 				9E13F86A3004711C000A60D7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -57,7 +57,7 @@
 		9E13F86A3004711C000A60D7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				9E13F8693004711C000A60D7 /* munki-pkg */,
+				9E13F8693004711C000A60D7 /* swiftpkg */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -65,9 +65,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		9E13F8683004711C000A60D7 /* munki-pkg */ = {
+		9E13F8683004711C000A60D7 /* swiftpkg */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9E13F8703004711C000A60D7 /* Build configuration list for PBXNativeTarget "munki-pkg" */;
+			buildConfigurationList = 9E13F8703004711C000A60D7 /* Build configuration list for PBXNativeTarget "swiftpkg" */;
 			buildPhases = (
 				9E13F8653004711C000A60D7 /* Sources */,
 				9E13F8663004711C000A60D7 /* Frameworks */,
@@ -78,14 +78,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				9E13F86B3004711C000A60D7 /* munki-pkg */,
+				9E13F86B3004711C000A60D7 /* swiftpkg */,
 			);
-			name = "munki-pkg";
+			name = swiftpkg;
 			packageProductDependencies = (
 				9E13F8753004711C000A60D7 /* Yams */,
 			);
 			productName = "munki-pkg";
-			productReference = 9E13F8693004711C000A60D7 /* munki-pkg */;
+			productReference = 9E13F8693004711C000A60D7 /* swiftpkg */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
@@ -103,7 +103,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 9E13F8643004711C000A60D7 /* Build configuration list for PBXProject "munki-pkg" */;
+			buildConfigurationList = 9E13F8643004711C000A60D7 /* Build configuration list for PBXProject "swiftpkg" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -120,7 +120,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				9E13F8683004711C000A60D7 /* munki-pkg */,
+				9E13F8683004711C000A60D7 /* swiftpkg */,
 			);
 		};
 /* End PBXProject section */
@@ -293,7 +293,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		9E13F8643004711C000A60D7 /* Build configuration list for PBXProject "munki-pkg" */ = {
+		9E13F8643004711C000A60D7 /* Build configuration list for PBXProject "swiftpkg" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9E13F86E3004711C000A60D7 /* Debug */,
@@ -302,7 +302,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9E13F8703004711C000A60D7 /* Build configuration list for PBXNativeTarget "munki-pkg" */ = {
+		9E13F8703004711C000A60D7 /* Build configuration list for PBXNativeTarget "swiftpkg" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9E13F8713004711C000A60D7 /* Debug */,
