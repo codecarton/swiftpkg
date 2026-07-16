@@ -11,9 +11,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
+      - name: Report toolchain
+        run: swift --version
       - name: Unit tests
         run: swift test
       - name: Package integration verification
