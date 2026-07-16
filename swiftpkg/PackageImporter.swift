@@ -84,7 +84,7 @@ struct PackageImporter {
 
             WARNING: package contains non-default owner/group on some files. build-info ownership has been set to "preserve".
             Check the bom for accuracy.
-            Run munkipkg --sync with sudo to apply the correct owner and group to payload files.
+            Run swiftpkg --sync with sudo to apply the correct owner and group to payload files.
 
             """.utf8))
         }

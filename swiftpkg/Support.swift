@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-let munkipkgVersion = "1.0"
+let swiftpkgVersion = "1.0"
 
 enum MunkiPkgError: Error, CustomStringConvertible {
     case message(String)
@@ -51,7 +51,7 @@ final class Console {
     let quiet: Bool
     private let toolName: String
 
-    init(quiet: Bool, toolName: String = "munkipkg") {
+    init(quiet: Bool, toolName: String = "swiftpkg") {
         self.quiet = quiet
         self.toolName = toolName
     }

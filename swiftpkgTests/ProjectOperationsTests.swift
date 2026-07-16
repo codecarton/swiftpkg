@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import munkipkg
+@testable import swiftpkg
 
 struct ProjectOperationsTests {
     @Test func `creates a project template`() throws {

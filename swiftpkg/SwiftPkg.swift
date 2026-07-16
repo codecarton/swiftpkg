@@ -11,7 +11,7 @@ enum SwiftPkg {
             print(CLIParser.usage)
             return 0
         case .version:
-            print(munkipkgVersion)
+            print(swiftpkgVersion)
             return 0
         case .failure(let message):
             FileHandle.standardError.write(Data(("ERROR: \(message)\n").utf8))

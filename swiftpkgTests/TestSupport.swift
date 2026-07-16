@@ -1,13 +1,13 @@
 import Foundation
 import Testing
-@testable import munkipkg
+@testable import swiftpkg
 
 struct TemporaryDirectory {
     let url: URL
 
     init() throws {
         url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("munkipkg-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("swiftpkg-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
     }
 

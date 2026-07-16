@@ -24,7 +24,7 @@ enum CLIParseResult: Equatable {
 
 enum CLIParser {
     static let usage = """
-    Usage: munkipkg [options] pkg_project_directory
+    Usage: swiftpkg [options] pkg_project_directory
            A tool for building a package from the contents of a
            pkg_project_directory.
 

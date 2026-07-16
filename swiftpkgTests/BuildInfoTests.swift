@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import munkipkg
+@testable import swiftpkg
 
 struct BuildInfoTests {
     @Test func `defaults remove spaces and provide upstream values`() throws {

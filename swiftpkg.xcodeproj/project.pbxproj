@@ -84,7 +84,7 @@
 			packageProductDependencies = (
 				9E13F8753004711C000A60D7 /* Yams */,
 			);
-			productName = "munki-pkg";
+			productName = "swiftpkg";
 			productReference = 9E13F8693004711C000A60D7 /* swiftpkg */;
 			productType = "com.apple.product-type.tool";
 		};

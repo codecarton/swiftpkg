@@ -1,4 +1,4 @@
-# munki-pkg
+# swiftpkg
 
 Swift implementation of [`munki-pkg`](https://github.com/munki/munki-pkg), a macOS command-line tool for building Apple installer packages from version-control-friendly project directories.
 
@@ -24,13 +24,13 @@ swift build -c release
 The binary is created at:
 
 ```text
-.build/release/munkipkg
+.build/release/swiftpkg
 ```
 
 The Xcode project can also be built with:
 
 ```sh
-xcodebuild -project munki-pkg.xcodeproj -scheme munki-pkg -configuration Release build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
 ```
 
 ## Usage
@@ -38,25 +38,25 @@ xcodebuild -project munki-pkg.xcodeproj -scheme munki-pkg -configuration Release
 Build a project:
 
 ```sh
-.build/release/munkipkg path/to/project
+.build/release/swiftpkg path/to/project
 ```
 
 Create a project template:
 
 ```sh
-.build/release/munkipkg --create path/to/project
+.build/release/swiftpkg --create path/to/project
 ```
 
 Import an existing package:
 
 ```sh
-.build/release/munkipkg --import path/to/existing.pkg path/to/project
+.build/release/swiftpkg --import path/to/existing.pkg path/to/project
 ```
 
 Apply tracked BOM metadata without building:
 
 ```sh
-.build/release/munkipkg --sync path/to/project
+.build/release/swiftpkg --sync path/to/project
 ```
 
 Useful options include:

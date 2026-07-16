@@ -41,7 +41,7 @@ struct PackageBuilder {
         } else if !fileManager.directoryExists(at: buildDirectory) {
             throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.")
         }
-        let temporary = fileManager.temporaryDirectory.appendingPathComponent("munkipkg-\(UUID().uuidString)", isDirectory: true)
+        let temporary = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: temporary, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: temporary) }
 
@@ -240,7 +240,7 @@ struct PackageBuilder {
             }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        FileHandle.standardError.write(Data("munkipkg: Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.\n".utf8))
+        FileHandle.standardError.write(Data("swiftpkg: Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.\n".utf8))
         return false
     }
 

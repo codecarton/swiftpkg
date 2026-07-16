@@ -2,8 +2,8 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-BIN="$ROOT/.build/release/munkipkg"
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/munkipkg-verify.XXXXXX")
+BIN="$ROOT/.build/release/swiftpkg"
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/swiftpkg-verify.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
 for tool in /usr/bin/pkgbuild /usr/sbin/pkgutil; do

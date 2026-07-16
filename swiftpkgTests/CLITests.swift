@@ -1,5 +1,5 @@
 import Testing
-@testable import munkipkg
+@testable import swiftpkg
 
 struct CLITests {
     @Test func `parses supported options`() {

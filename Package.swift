@@ -3,24 +3,24 @@
 import PackageDescription
 
 let package = Package(
-    name: "munkipkg",
+    name: "swiftpkg",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "munkipkg", targets: ["munkipkg"])
+        .executable(name: "swiftpkg", targets: ["swiftpkg"])
     ],
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.2")
     ],
     targets: [
         .executableTarget(
-            name: "munkipkg",
+            name: "swiftpkg",
             dependencies: ["Yams"],
-            path: "munki-pkg"
+            path: "swiftpkg"
         ),
         .testTarget(
-            name: "munkipkgTests",
-            dependencies: ["munkipkg", "Yams"],
-            path: "munki-pkgTests"
+            name: "swiftpkgTests",
+            dependencies: ["swiftpkg", "Yams"],
+            path: "swiftpkgTests"
         )
     ]
 )
