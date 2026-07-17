@@ -7,9 +7,11 @@
 [![License](https://img.shields.io/github/license/codecarton/swiftpkg)](LICENSE)
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
 
-`swiftpkg` is a macOS command-line tool for building Apple installer packages
-from version-control-friendly project directories. It is a Swift implementation
-of [`munki-pkg`](https://github.com/munki/munki-pkg).
+`swiftpkg` is a native toolkit for building Apple installer packages from
+version-control-friendly project directories. Use the command-line tool for
+automation today; Swiftpkgr, its macOS desktop companion, brings a visual
+workflow in the 0.3.0 release. Both are powered by the same Swift
+implementation of [`munki-pkg`](https://github.com/munki/munki-pkg).
 
 ## Install for Mac administrators
 
@@ -70,6 +72,24 @@ Useful options:
 --version              Show the tool version
 ```
 
+## Swiftpkgr desktop app — coming in 0.3.0
+
+Coming in the swiftpkg 0.3.0 release, Swiftpkgr is the native macOS 15+
+desktop companion to the macOS 13+ `swiftpkg` command-line tool. It opens the
+same project directories and uses the same configuration, import, build, and
+BOM implementation, so projects can move between visual and automated
+workflows without conversion.
+
+Swiftpkgr will let you create, open, or convert package projects; import
+existing installer packages; edit package, distribution, signing, and
+notarization values; and build packages while viewing operation progress. It
+will import and export CLI-compatible plist, JSON, or YAML settings without
+losing `${version}` placeholders.
+
+Swiftpkgr will be included in the same installer package as the CLI beginning
+with 0.3.0. Until that release is available, build the app from source with the
+Xcode command below.
+
 ## Project layout
 
 ```text
@@ -102,7 +122,8 @@ The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
 provides YAML support. The Xcode project also builds with:
 
 ```sh
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## Maintainer releases
