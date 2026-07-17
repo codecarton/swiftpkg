@@ -26,6 +26,7 @@ final class ProjectEditorModel {
     @ObservationIgnored private let panels = ProjectPanelService()
     @ObservationIgnored private var savedDraft: PackageSettingsDraft?
     @ObservationIgnored private var pendingProjectAction: PendingProjectAction?
+    @ObservationIgnored private var pendingSettingsExportFormat: BuildInfoFormat?
     @ObservationIgnored private var operationTask: Task<Void, Never>?
 
     var isProjectOpen: Bool { projectURL != nil }
@@ -142,7 +143,8 @@ final class ProjectEditorModel {
         }
     }
 
-    func requestSettingsExport() {
+    func requestSettingsExport(as format: BuildInfoFormat) {
+        pendingSettingsExportFormat = format
         if draft.notarizationMode == .appleID, !draft.notarizationPassword.isEmpty {
             showsSensitiveExportWarning = true
         } else {
@@ -151,12 +153,11 @@ final class ProjectEditorModel {
     }
 
     func exportSettings() {
+        defer { pendingSettingsExportFormat = nil }
         do {
             let configuration = try draft.validatedConfiguration()
-            guard let url = panels.chooseSettingsDestination(defaultName: "build-info.plist") else { return }
-            guard let format = BuildInfoFormat(rawValue: url.pathExtension.lowercased()) else {
-                throw MunkiPkgError.invalidConfiguration("Export settings as a .plist, .json, .yaml, or .yml file.")
-            }
+            let format = pendingSettingsExportFormat ?? buildInfoDocument?.format ?? .plist
+            guard let url = panels.chooseSettingsDestination(format: format) else { return }
             try BuildInfoStore.write(configuration, toFile: url, format: format)
             statusMessage = "Exported settings"
             activityLog.append("Exported settings to \(url.path)")

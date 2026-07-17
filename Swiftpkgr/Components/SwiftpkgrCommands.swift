@@ -1,3 +1,4 @@
+import SwiftPkgCore
 import SwiftUI
 
 struct SwiftpkgrCommands: Commands {
@@ -22,7 +23,13 @@ struct SwiftpkgrCommands: Commands {
             Divider()
             Button("Import Settings…", systemImage: "square.and.arrow.down.on.square", action: model.importSettings)
                 .disabled(!model.isProjectOpen || model.isRunning)
-            Button("Export Settings…", systemImage: "square.and.arrow.up.on.square", action: model.requestSettingsExport)
+            Menu("Export Settings…", systemImage: "square.and.arrow.up.on.square") {
+                ForEach(BuildInfoFormat.allCases) { format in
+                    Button(format.displayName) {
+                        model.requestSettingsExport(as: format)
+                    }
+                }
+            }
                 .disabled(!model.isProjectOpen || model.isRunning)
         }
 

@@ -85,7 +85,7 @@ struct BuildInfoTests {
         #expect(resolved.name == "Project-3.0.pkg")
     }
 
-    @Test("standalone plist and JSON settings round trip", arguments: [BuildInfoFormat.plist, .json])
+    @Test("standalone settings round trip", arguments: BuildInfoFormat.allCases)
     func standaloneSettingsRoundTrip(_ format: BuildInfoFormat) throws {
         let temporary = try TemporaryDirectory(); defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)

@@ -1,3 +1,4 @@
+import SwiftPkgCore
 import SwiftUI
 
 struct ProjectEditorView: View {
@@ -25,7 +26,13 @@ struct ProjectEditorView: View {
             ToolbarItemGroup {
                 Button("Import Settings", systemImage: "square.and.arrow.down", action: model.importSettings)
                     .disabled(!model.isProjectOpen || model.isRunning)
-                Button("Export Settings", systemImage: "square.and.arrow.up", action: model.requestSettingsExport)
+                Menu("Export Settings", systemImage: "square.and.arrow.up") {
+                    ForEach(BuildInfoFormat.allCases) { format in
+                        Button(format.displayName) {
+                            model.requestSettingsExport(as: format)
+                        }
+                    }
+                }
                     .disabled(!model.isProjectOpen || model.isRunning)
                     .confirmationDialog(
                         "Export Password in Plaintext?",
