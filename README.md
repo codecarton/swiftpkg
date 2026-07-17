@@ -15,13 +15,14 @@ of [`munki-pkg`](https://github.com/munki/munki-pkg).
 
 Download `swiftpkg-<version>-universal.pkg` and `SHA256SUMS` from the matching
 GitHub Release. The installer is Universal 2 (Apple silicon and Intel),
-Developer ID signed, and notarized; it supports macOS 13 and later.
+currently unsigned; it supports macOS 13 and later. This is temporary while
+Apple signing and notarization are being set up. Verify the published checksum
+before deployment and expect macOS to require an administrator override.
 
 Verify the download before installation:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-spctl --assess --type install --verbose=4 swiftpkg-<version>-universal.pkg
 sudo installer -pkg swiftpkg-<version>-universal.pkg -target /
 swiftpkg --version
 ```
@@ -123,8 +124,14 @@ notarizes, staples, and validates the installer, then writes artifacts and
 the matching tag, add `GH_PUBLISH=1 GITHUB_REPOSITORY=owner/repo`; this requires
 the GitHub CLI to be authenticated on the release Mac.
 
-GitHub Actions validates pull requests and tags but intentionally has no Apple
-signing credentials. See [VERIFICATION.md](VERIFICATION.md),
+Until Apple credentials are available, pushing a matching `v<version>` tag runs
+the GitHub **Release** workflow. It builds an unsigned installer and publishes
+it with `SHA256SUMS` to that GitHub Release. The same temporary behavior can be
+run locally with `UNSIGNED=1 ./scripts/release.sh`. Unsigned packages must not
+be treated as notarized or Gatekeeper-validated.
+
+GitHub Actions validates pull requests and tags and publishes unsigned tagged
+releases; it intentionally has no Apple signing credentials. See [VERIFICATION.md](VERIFICATION.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for project
 processes.
 

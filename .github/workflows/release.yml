@@ -1,0 +1,21 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  publish-unsigned-package:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build and publish unsigned installer
+        env:
+          UNSIGNED: '1'
+          GH_PUBLISH: '1'
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/release.sh
