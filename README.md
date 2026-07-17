@@ -87,8 +87,7 @@ will import and export CLI-compatible plist, JSON, or YAML settings without
 losing `${version}` placeholders.
 
 Swiftpkgr will be included in the same installer package as the CLI beginning
-with 0.3.0. Until that release is available, build the app from source with the
-Xcode command below.
+with 0.3.0.
 
 ## Project layout
 
@@ -119,11 +118,10 @@ swift test
 ```
 
 The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
-provides YAML support. The Xcode project also builds with:
+provides YAML support. The CLI target also builds with:
 
 ```sh
 xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## Maintainer releases
