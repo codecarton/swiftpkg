@@ -34,3 +34,7 @@ struct ProjectContentsView: View {
         .navigationTitle("Project Contents")
     }
 }
+
+#Preview {
+    ProjectContentsView(model: ProjectEditorModel())
+}

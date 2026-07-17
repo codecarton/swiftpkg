@@ -99,6 +99,51 @@ struct BuildInfoTests {
         #expect(loaded.identifier == configuration.identifier)
     }
 
+    @Test("Apple ID notarization credentials round trip", arguments: BuildInfoFormat.allCases)
+    func appleIDNotarizationCredentialsRoundTrip(_ format: BuildInfoFormat) throws {
+        let temporary = try TemporaryDirectory(); defer { temporary.remove() }
+        let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: false)
+        let defaults = PackageConfiguration.defaults(for: project)
+        let configuration = PackageConfiguration(
+            name: defaults.name,
+            identifier: defaults.identifier,
+            version: defaults.version,
+            ownership: defaults.ownership,
+            installLocation: defaults.installLocation,
+            compression: defaults.compression,
+            minimumOSVersion: defaults.minimumOSVersion,
+            usesLargePayload: defaults.usesLargePayload,
+            postInstallAction: defaults.postInstallAction,
+            preservesExtendedAttributes: defaults.preservesExtendedAttributes,
+            suppressesBundleRelocation: defaults.suppressesBundleRelocation,
+            usesDistributionStyle: defaults.usesDistributionStyle,
+            title: defaults.title,
+            productIdentifier: defaults.productIdentifier,
+            signing: defaults.signing,
+            notarization: NotarizationConfiguration(
+                authentication: .appleID(
+                    appleID: "developer@example.com",
+                    teamID: "TEAMID1234",
+                    password: "app-specific-password"
+                ),
+                staplingTimeout: 120
+            )
+        )
+
+        try BuildInfoStore.write(configuration, to: project, format: format)
+        let loaded = try BuildInfoStore.loadTemplate(from: project, requestedFormat: format)
+
+        guard case let .appleID(appleID, teamID, password) = loaded.notarization?.authentication else {
+            Issue.record("Expected Apple ID notarization credentials")
+            return
+        }
+        #expect(appleID == "developer@example.com")
+        #expect(teamID == "TEAMID1234")
+        #expect(password == "app-specific-password")
+        #expect(loaded.notarization?.staplingTimeout == 120)
+    }
+
     @Test("draft validates required values and nested settings")
     func draftValidation() throws {
         let project = URL(fileURLWithPath: "/tmp/Project")

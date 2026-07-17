@@ -30,3 +30,7 @@ struct SigningSettingsView: View {
         .navigationTitle("Signing")
     }
 }
+
+#Preview {
+    SigningSettingsView(model: ProjectEditorModel())
+}

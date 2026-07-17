@@ -21,3 +21,7 @@ struct DistributionSettingsView: View {
         .navigationTitle("Distribution")
     }
 }
+
+#Preview {
+    DistributionSettingsView(model: ProjectEditorModel())
+}

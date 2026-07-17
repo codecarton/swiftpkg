@@ -43,3 +43,7 @@ struct BuildView: View {
         .navigationTitle("Build")
     }
 }
+
+#Preview {
+    BuildView(model: ProjectEditorModel())
+}

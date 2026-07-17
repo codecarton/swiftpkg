@@ -37,3 +37,7 @@ struct NotarizationSettingsView: View {
         .navigationTitle("Notarization")
     }
 }
+
+#Preview {
+    NotarizationSettingsView(model: ProjectEditorModel())
+}

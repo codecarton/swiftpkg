@@ -35,3 +35,7 @@ struct PackageBehaviorView: View {
         .navigationTitle("Package Behavior")
     }
 }
+
+#Preview {
+    PackageBehaviorView(model: ProjectEditorModel())
+}

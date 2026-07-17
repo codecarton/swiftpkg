@@ -222,7 +222,8 @@ private extension NotarizationConfiguration {
     var encodedValues: [String: Any] {
         var values: [String: Any] = ["staple_timeout": staplingTimeout]
         switch authentication {
-        case let .appleID(appleID, teamID, _): values.merge(["apple_id": appleID, "team_id": teamID]) { _, new in new }
+        case let .appleID(appleID, teamID, password):
+            values.merge(["apple_id": appleID, "team_id": teamID, "password": password]) { _, new in new }
         case let .keychainProfile(profile): values["keychain_profile"] = profile
         }
         return values

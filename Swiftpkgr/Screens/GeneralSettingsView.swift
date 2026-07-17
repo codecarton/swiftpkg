@@ -23,3 +23,7 @@ struct GeneralSettingsView: View {
         .navigationTitle("General")
     }
 }
+
+#Preview {
+    GeneralSettingsView(model: ProjectEditorModel())
+}

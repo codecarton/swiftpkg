@@ -22,3 +22,7 @@ struct ProjectSectionView: View {
         }
     }
 }
+
+#Preview {
+    ProjectSectionView(model: ProjectEditorModel())
+}

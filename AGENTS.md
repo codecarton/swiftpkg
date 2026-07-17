@@ -31,9 +31,21 @@ Apple tools such as `pkgbuild`, `productbuild`, `pkgutil`, `ditto`, and
   behavior is testable with `RecordingRunner`.
 - `swiftpkg/PackageSettingsDraft.swift` is the editable configuration boundary;
   keep template loading distinct from build-time version substitution.
-- `Swiftpkgr/` contains the macOS 15 SwiftUI app. Views use the observable
-  `ProjectEditorModel` and call `PackageOperationService` rather than invoking
-  package tools directly.
+- `Swiftpkgr/` contains the macOS 15 SwiftUI app. Keep `SwiftpkgrApp.swift` at
+  the app root and organize the remaining app files by role:
+  - `Screens/` contains user-facing navigation destinations and other base
+    views rendered as complete screens.
+  - `Components/` contains composable UI and command elements used by screens,
+    the app entry point, or other components.
+  - `Services/` contains API, panel, and other service-layer integrations.
+  - `Models/` contains app-specific value and domain types.
+  - `Extensions/` contains extensions of existing types. Name each file
+    `<TypeName>+Ext.swift` and keep extensions for different base types in
+    separate files.
+  - `State/` contains state retained for the app lifecycle. Observable types,
+    including types marked with `@Observable`, generally belong here.
+  Views use the observable `ProjectEditorModel` and call
+  `PackageOperationService` rather than invoking package tools directly.
 
 Prefer fluent, role-based Swift names and concise documentation comments for
 new nontrivial types and entry points. Keep side effects explicit in method
