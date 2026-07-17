@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9F1E11A7300410D6000A60D7 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 9F1E11A9300410D6000A60D7 /* ArgumentParser */; };
 		9E13F8733004711C000A60D7 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 9E13F8753004711C000A60D7 /* Yams */; };
 /* End PBXBuildFile section */
 
@@ -39,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9F1E11A7300410D6000A60D7 /* ArgumentParser in Frameworks */,
 				9E13F8733004711C000A60D7 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -82,6 +84,7 @@
 			);
 			name = swiftpkg;
 			packageProductDependencies = (
+				9F1E11A9300410D6000A60D7 /* ArgumentParser */,
 				9E13F8753004711C000A60D7 /* Yams */,
 			);
 			productName = "swiftpkg";
@@ -113,6 +116,7 @@
 			mainGroup = 9E13F8603004711C000A60D7;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
 				9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -314,6 +318,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-argument-parser";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.7.0;
+			};
+		};
 		9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/jpsim/Yams.git";
@@ -325,6 +337,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		9F1E11A9300410D6000A60D7 /* ArgumentParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */;
+			productName = ArgumentParser;
+		};
 		9E13F8753004711C000A60D7 /* Yams */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */;

@@ -8,10 +8,10 @@ struct CLITests {
         #expect(swiftpkgVersion.split(separator: ".").allSatisfy { Int($0) != nil })
     }
 
-    @Test("parses supported options")
+    @Test("parses upstream-compatible options")
     func parsesSupportedOptions() {
         let result = CLIParser.parse([
-            "--create", "--json", "--quiet", "--import", "input.pkg", "Project"
+            "--create", "--json", "--quiet", "-f", "--import", "input.pkg", "Project"
         ])
 
         guard case .options(let options) = result else {
@@ -21,6 +21,7 @@ struct CLITests {
         #expect(options.create)
         #expect(options.json)
         #expect(options.quiet)
+        #expect(options.force)
         #expect(options.importPackage == "input.pkg")
         #expect(options.projectDirectory == "Project")
     }
@@ -49,5 +50,26 @@ struct CLITests {
             return
         }
         #expect(message == "--import option requires an argument")
+    }
+
+    @Test("preserves no-argument behavior")
+    func acceptsNoArguments() {
+        guard case .options(let options) = CLIParser.parse([]) else {
+            Issue.record("Expected options result")
+            return
+        }
+        #expect(options.projectDirectory == nil)
+    }
+
+    @Test("recognizes help and version options")
+    func recognizesHelpAndVersionOptions() {
+        guard case .help = CLIParser.parse(["--help"]) else {
+            Issue.record("Expected help result")
+            return
+        }
+        guard case .version = CLIParser.parse(["--version"]) else {
+            Issue.record("Expected version result")
+            return
+        }
     }
 }
