@@ -72,4 +72,29 @@ struct CLITests {
             return
         }
     }
+
+    @Test("resolves each operation into one command")
+    func resolvesOperationsIntoCommands() throws {
+        let create = try CLICommand.resolve(from: try parsedOptions(["--create", "Project"]))
+        guard case let .create(project, format, force) = create else { Issue.record("Expected create command"); return }
+        #expect(project.path.hasSuffix("Project"))
+        #expect(format == .plist)
+        #expect(!force)
+
+        let `import` = try CLICommand.resolve(from: try parsedOptions(["--import", "input.pkg", "Project"]))
+        guard case let .import(package, _, format) = `import` else { Issue.record("Expected import command"); return }
+        #expect(package.path.hasSuffix("input.pkg"))
+        #expect(format == .plist)
+
+        let synchronize = try CLICommand.resolve(from: try parsedOptions(["--sync", "Project"]))
+        guard case .synchronize = synchronize else { Issue.record("Expected synchronize command"); return }
+
+        let build = try CLICommand.resolve(from: try parsedOptions(["Project"]))
+        guard case .build = build else { Issue.record("Expected build command"); return }
+    }
+
+    private func parsedOptions(_ arguments: [String]) throws -> CLIOptions {
+        guard case let .options(options) = CLIParser.parse(arguments) else { throw MunkiPkgError.message("Expected CLI options") }
+        return options
+    }
 }

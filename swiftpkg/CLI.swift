@@ -1,4 +1,5 @@
 import ArgumentParser
+import Foundation
 
 struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Create a new empty project with default settings.")
@@ -46,6 +47,53 @@ enum CLIParseResult {
     case help
     case version
     case failure(String)
+}
+
+/// Represents the single operation requested by parsed command-line options.
+enum CLICommand {
+    case create(project: URL, format: BuildInfoFormat, force: Bool)
+    case `import`(package: URL, project: URL, format: BuildInfoFormat)
+    case synchronize(project: URL, requestedFormat: BuildInfoFormat?)
+    case build(project: URL, configuration: BuildConfiguration)
+
+    /// Resolves a parsed option set into one executable command.
+    static func resolve(from options: CLIOptions) throws -> CLICommand? {
+        guard let projectDirectory = options.projectDirectory else { return nil }
+        let project = URL(fileURLWithPath: projectDirectory).standardizedFileURL
+        let requestedFormat = try BuildInfoFormat.requested(by: options)
+
+        if options.create {
+            return .create(project: project, format: requestedFormat ?? .plist, force: options.force)
+        }
+        if let packagePath = options.importPackage {
+            return .import(
+                package: URL(fileURLWithPath: packagePath).standardizedFileURL,
+                project: project,
+                format: requestedFormat ?? .plist
+            )
+        }
+        if options.sync { return .synchronize(project: project, requestedFormat: requestedFormat) }
+        return .build(project: project, configuration: BuildConfiguration(options: options, requestedFormat: requestedFormat))
+    }
+}
+
+/// Contains build-only command-line choices after parsing has completed.
+struct BuildConfiguration {
+    let requestedFormat: BuildInfoFormat?
+    let exportsBOM: Bool
+    let isQuiet: Bool
+    let skipsSigning: Bool
+    let skipsNotarization: Bool
+    let skipsStapling: Bool
+
+    init(options: CLIOptions, requestedFormat: BuildInfoFormat?) {
+        self.requestedFormat = requestedFormat
+        exportsBOM = options.exportBOMInfo
+        isQuiet = options.quiet
+        skipsSigning = options.skipSigning
+        skipsNotarization = options.skipNotarization
+        skipsStapling = options.skipStapling
+    }
 }
 
 enum CLIParser {

@@ -3,9 +3,14 @@ import Foundation
 
 enum MunkiPkgError: Error, CustomStringConvertible {
     case message(String)
+    case invalidConfiguration(String)
+    case processFailed(tool: String, message: String)
 
     var description: String {
-        switch self { case .message(let value): value }
+        switch self {
+        case let .message(value), let .invalidConfiguration(value): value
+        case let .processFailed(tool, message): "\(tool): \(message)"
+        }
     }
 }
 
@@ -19,11 +24,25 @@ struct ProcessResult: Equatable {
 }
 
 protocol ProcessRunning {
-    func run(_ executable: String, _ arguments: [String]) throws -> ProcessResult
+    /// Runs an executable with arguments and returns its captured result.
+    func run(executable: String, arguments: [String]) throws -> ProcessResult
+
+    /// Runs an executable and throws a structured error when it exits unsuccessfully.
+    func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws
+}
+
+extension ProcessRunning {
+    func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws {
+        let result = try run(executable: executable, arguments: arguments)
+        guard result.status == 0 else {
+            let details = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw MunkiPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: details.isEmpty ? failureMessage : "\(failureMessage) \(details)")
+        }
+    }
 }
 
 struct SystemProcessRunner: ProcessRunning {
-    func run(_ executable: String, _ arguments: [String]) throws -> ProcessResult {
+    func run(executable: String, arguments: [String]) throws -> ProcessResult {
         let process = Process()
         let stdout = Pipe()
         let stderr = Pipe()

@@ -17,31 +17,42 @@ enum SwiftPkg {
             FileHandle.standardError.write(Data(("ERROR: \(message)\n").utf8))
             return 255
         case .options(let options):
-            guard let path = options.projectDirectory else {
+            let command: CLICommand?
+            do {
+                command = try CLICommand.resolve(from: options)
+            } catch {
+                consoleError(String(describing: error))
+                return 255
+            }
+            guard let command else {
                 print(CLIParser.usage)
                 return 0
             }
             let console = Console(quiet: options.quiet)
-            let project = URL(fileURLWithPath: path).standardizedFileURL
-            let projects = ProjectOperations(fileManager: fileManager, runner: runner, console: console)
             do {
-                if options.create {
-                    try projects.createProject(at: project, options: options)
-                } else if let package = options.importPackage {
+                switch command {
+                case let .create(project, format, force):
+                    try ProjectCreator(fileManager: fileManager, console: console)
+                        .createProject(at: project, format: format, force: force)
+                case let .import(package, project, format):
                     try PackageImporter(fileManager: fileManager, runner: runner, console: console)
-                        .importPackage(at: URL(fileURLWithPath: package).standardizedFileURL, to: project, options: options)
-                } else {
+                        .importPackage(at: package, to: project, format: format)
+                case let .synchronize(project, requestedFormat):
                     guard fileManager.directoryExists(at: project) else {
                         throw MunkiPkgError.message(fileManager.itemExists(at: project)
                             ? "\(project.path) is not a directory."
                             : "\(project.path): Project not found.")
                     }
-                    if options.sync {
-                        try projects.syncFromBOM(project: project, options: options)
-                    } else {
-                        try PackageBuilder(fileManager: fileManager, runner: runner, console: console)
-                            .build(project: project, options: options)
+                    try BOMMetadataService(fileManager: fileManager, runner: runner, console: console)
+                        .synchronizeMetadataFromBOM(in: project, requestedFormat: requestedFormat)
+                case let .build(project, configuration):
+                    guard fileManager.directoryExists(at: project) else {
+                        throw MunkiPkgError.message(fileManager.itemExists(at: project)
+                            ? "\(project.path) is not a directory."
+                            : "\(project.path): Project not found.")
                     }
+                    try PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
+                        .buildPackage(in: project, configuration: configuration)
                 }
                 return 0
             } catch {
@@ -50,4 +61,8 @@ enum SwiftPkg {
             }
         }
     }
+}
+
+private func consoleError(_ message: String) {
+    FileHandle.standardError.write(Data(("ERROR: \(message)\n").utf8))
 }

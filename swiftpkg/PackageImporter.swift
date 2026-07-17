@@ -19,19 +19,20 @@ struct PackageImporter {
     let runner: any ProcessRunning
     let console: Console
 
-    func importPackage(at package: URL, to project: URL, options: CLIOptions) throws {
+    /// Imports a package into a new project using the requested configuration format.
+    func importPackage(at package: URL, to project: URL, format: BuildInfoFormat) throws {
         guard !fileManager.itemExists(at: project) else {
             throw MunkiPkgError.message("Directory \(project.path) already exists.")
         }
         if fileManager.directoryExists(at: package) {
-            try importBundlePackage(package, project: project, options: options)
+            try importBundlePackage(package, project: project, format: format)
         } else {
-            try importFlatPackage(package, project: project, options: options)
+            try importFlatPackage(package, project: project, format: format)
         }
         console.display("Created new package project at \(project.path)")
     }
 
-    private func importBundlePackage(_ package: URL, project: URL, options: CLIOptions) throws {
+    private func importBundlePackage(_ package: URL, project: URL, format: BuildInfoFormat) throws {
         let contents = package.appendingPathComponent("Contents", isDirectory: true)
         let distributionFiles = try fileManager.contents(at: contents).filter { $0.hasSuffix(".dist") }
         guard distributionFiles.isEmpty else {
@@ -39,47 +40,47 @@ struct PackageImporter {
         }
         try fileManager.createDirectory(at: project, withIntermediateDirectories: false)
         do {
-            try projectOperations.exportBOM(from: contents.appendingPathComponent("Archive.bom"), project: project)
+            try bomMetadata.exportMetadata(from: contents.appendingPathComponent("Archive.bom"), to: project)
             let payload = project.appendingPathComponent("payload", isDirectory: true)
             try fileManager.createDirectory(at: payload, withIntermediateDirectories: false)
-            try requireSuccess(ToolPaths.ditto, ["-x", contents.appendingPathComponent("Archive.pax.gz").path, payload.path], failure: "Ditto failed to expand Payload")
+            try runner.runSuccessfully(executable: ToolPaths.ditto, arguments: ["-x", contents.appendingPathComponent("Archive.pax.gz").path, payload.path], failureMessage: "Ditto failed to expand Payload")
             try copyBundleScripts(package: package, project: project)
-            try convertInfoPlist(package: package, project: project, options: options)
-            try warnAndSync(project: project, options: options)
-            try projectOperations.writeGitignore(project: project)
+            try convertInfoPlist(package: package, project: project, format: format)
+            try warnAndSynchronize(project: project, requestedFormat: format)
+            try ProjectSupport(fileManager: fileManager).writeGitignore(in: project)
         } catch {
             try? fileManager.removeItem(at: project)
             throw error
         }
     }
 
-    private func importFlatPackage(_ package: URL, project: URL, options: CLIOptions) throws {
+    private func importFlatPackage(_ package: URL, project: URL, format: BuildInfoFormat) throws {
         do {
-            try requireSuccess(ToolPaths.pkgutil, ["--expand", package.path, project.path], failure: "Could not expand package.")
+            try runner.runSuccessfully(executable: ToolPaths.pkgutil, arguments: ["--expand", package.path, project.path], failureMessage: "Could not expand package.")
             try handleDistributionPackage(project: project)
             let bom = project.appendingPathComponent("Bom")
-            try projectOperations.exportBOM(from: bom, project: project)
+            try bomMetadata.exportMetadata(from: bom, to: project)
             try fileManager.removeIfPresent(at: bom)
             let scripts = project.appendingPathComponent("Scripts")
             if fileManager.itemExists(at: scripts) {
                 try fileManager.moveItem(at: scripts, to: project.appendingPathComponent("scripts"))
             }
             try expandPayload(project: project)
-            try convertPackageInfo(package: package, project: project, options: options)
-            try warnAndSync(project: project, options: options)
-            try projectOperations.writeGitignore(project: project)
+            try convertPackageInfo(package: package, project: project, format: format)
+            try warnAndSynchronize(project: project, requestedFormat: format)
+            try ProjectSupport(fileManager: fileManager).writeGitignore(in: project)
         } catch {
             try? fileManager.removeItem(at: project)
             throw error
         }
     }
 
-    private var projectOperations: ProjectOperations {
-        ProjectOperations(fileManager: fileManager, runner: runner, console: console)
+    private var bomMetadata: BOMMetadataService {
+        BOMMetadataService(fileManager: fileManager, runner: runner, console: console)
     }
 
-    private func warnAndSync(project: URL, options: CLIOptions) throws {
-        if projectOperations.hasNonRecommendedOwnership(project: project), geteuid() != 0 {
+    private func warnAndSynchronize(project: URL, requestedFormat: BuildInfoFormat?) throws {
+        if bomMetadata.hasNonRecommendedOwnership(in: project), geteuid() != 0 {
             FileHandle.standardError.write(Data("""
 
             WARNING: package contains non-default owner/group on some files. build-info ownership has been set to "preserve".
@@ -88,7 +89,7 @@ struct PackageImporter {
 
             """.utf8))
         }
-        try projectOperations.syncFromBOM(project: project, options: options)
+        try bomMetadata.synchronizeMetadataFromBOM(in: project, requestedFormat: requestedFormat)
     }
 
     private func handleDistributionPackage(project: URL) throws {
@@ -116,11 +117,11 @@ struct PackageImporter {
         let payload = project.appendingPathComponent("payload", isDirectory: true)
         try fileManager.moveItem(at: payloadFile, to: archive)
         try fileManager.createDirectory(at: payload, withIntermediateDirectories: false)
-        try requireSuccess(ToolPaths.ditto, ["-x", archive.path, payload.path], failure: "Ditto failed to expand Payload")
+        try runner.runSuccessfully(executable: ToolPaths.ditto, arguments: ["-x", archive.path, payload.path], failureMessage: "Ditto failed to expand Payload")
         try fileManager.removeIfPresent(at: archive)
     }
 
-    private func convertPackageInfo(package: URL, project: URL, options: CLIOptions) throws {
+    private func convertPackageInfo(package: URL, project: URL, format: BuildInfoFormat) throws {
         let url = project.appendingPathComponent("PackageInfo")
         guard let parser = XMLParser(contentsOf: url) else { throw MunkiPkgError.message("Could not parse \(url.path)") }
         let delegate = PackageInfoParser()
@@ -136,12 +137,12 @@ struct PackageImporter {
             "name": package.lastPathComponent,
             "distribution_style": fileManager.itemExists(at: project.appendingPathComponent("Distribution"))
         ]
-        if projectOperations.hasNonRecommendedOwnership(project: project) { values["ownership"] = "preserve" }
-        try BuildInfoIO.write(BuildInfo(values: values), project: project, options: options)
+        if bomMetadata.hasNonRecommendedOwnership(in: project) { values["ownership"] = "preserve" }
+        try writeImportedConfiguration(values, project: project, format: format)
         try fileManager.removeIfPresent(at: url)
     }
 
-    private func convertInfoPlist(package: URL, project: URL, options: CLIOptions) throws {
+    private func convertInfoPlist(package: URL, project: URL, format: BuildInfoFormat) throws {
         let url = package.appendingPathComponent("Contents/Info.plist")
         let object = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
         guard let plist = object as? [String: Any] else { throw MunkiPkgError.message("Could not read \(url.path)") }
@@ -157,8 +158,8 @@ struct PackageImporter {
             "postinstall_action": action,
             "name": package.lastPathComponent
         ]
-        if projectOperations.hasNonRecommendedOwnership(project: project) { values["ownership"] = "preserve" }
-        try BuildInfoIO.write(BuildInfo(values: values), project: project, options: options)
+        if bomMetadata.hasNonRecommendedOwnership(in: project) { values["ownership"] = "preserve" }
+        try writeImportedConfiguration(values, project: project, format: format)
     }
 
     private func copyBundleScripts(package: URL, project: URL) throws {
@@ -190,11 +191,8 @@ struct PackageImporter {
         return kind == "pre" ? pre : kind == "post" ? post : pre + post
     }
 
-    private func requireSuccess(_ executable: String, _ arguments: [String], failure: String) throws {
-        let result = try runner.run(executable, arguments)
-        guard result.status == 0 else {
-            let detail = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MunkiPkgError.message(detail.isEmpty ? failure : "\(failure) \(detail)")
-        }
+    private func writeImportedConfiguration(_ values: [String: Any], project: URL, format: BuildInfoFormat) throws {
+        let configuration = try PackageConfiguration(values: values, defaults: .defaults(for: project))
+        try BuildInfoStore.write(configuration, to: project, format: format)
     }
 }
