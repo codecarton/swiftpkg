@@ -9,9 +9,9 @@
 
 `swiftpkg` is a native toolkit for building Apple installer packages from
 version-control-friendly project directories. Use the command-line tool for
-automation today; Swiftpkgr, its macOS desktop companion, brings a visual
-workflow in the 0.3.0 release. Both are powered by the same Swift
-implementation of [`munki-pkg`](https://github.com/munki/munki-pkg).
+automation or Swiftpkgr, its macOS desktop companion, for a visual workflow.
+Both are powered by the same Swift implementation of
+[`munki-pkg`](https://github.com/munki/munki-pkg).
 
 ## Install for Mac administrators
 
@@ -72,11 +72,12 @@ Useful options:
 --version              Show the tool version
 ```
 
-## Swiftpkgr graphical app
+## Swiftpkgr desktop app
 
-Swiftpkgr is the native macOS 15+ frontend included alongside the macOS 13+
+Swiftpkgr is the native macOS 15+ desktop companion to the macOS 13+
 `swiftpkg` command-line tool. It opens the same project directories and uses
-the same configuration, import, build, and BOM implementation.
+the same configuration, import, build, and BOM implementation, so projects can
+move between visual and automated workflows without conversion.
 
 Use Swiftpkgr to create, open, or convert package projects; import existing
 installer packages; edit package, distribution, signing, and notarization
@@ -85,7 +86,9 @@ plist or JSON settings to prefill the editor and export CLI-compatible plist
 or JSON without losing `${version}` placeholders.
 
 Swiftpkgr also opens existing YAML projects. Standalone settings import and
-export are intentionally limited to plist and JSON.
+export are intentionally limited to plist and JSON. Swiftpkgr is planned for
+inclusion in the same installer package as the CLI; until that packaging work
+is complete, build the app from source with the Xcode command below.
 
 ## Project layout
 
