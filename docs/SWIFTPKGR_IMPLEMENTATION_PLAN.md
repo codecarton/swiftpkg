@@ -376,8 +376,8 @@ Continue running:
 swift test
 ./scripts/verify-loop.sh
 swift build -c release
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
-xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
 git diff --check
 ```
 

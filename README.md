@@ -119,8 +119,8 @@ The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
 provides YAML support. The CLI target also builds with:
 
 ```sh
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
-xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## Maintainer releases

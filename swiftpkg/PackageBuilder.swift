@@ -222,7 +222,7 @@ private struct NotarizationService: Sendable {
             if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.message("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        FileHandle.standardError.write(Data("swiftpkg: Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.\n".utf8))
+        console.warning("Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.")
         return false
     }
 

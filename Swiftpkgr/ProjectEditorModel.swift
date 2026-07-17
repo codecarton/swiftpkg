@@ -32,6 +32,7 @@ final class ProjectEditorModel {
     var hasUnsavedChanges: Bool { savedDraft.map { $0 != draft } ?? false }
     var projectName: String { projectURL?.lastPathComponent ?? "Swiftpkgr" }
     var canBuild: Bool { isProjectOpen && !isRunning }
+    var showsBuildConfirmation = false
 
     var payloadURL: URL? {
         guard let projectURL else { return nil }
@@ -153,8 +154,8 @@ final class ProjectEditorModel {
         do {
             let configuration = try draft.validatedConfiguration()
             guard let url = panels.chooseSettingsDestination(defaultName: "build-info.plist") else { return }
-            guard let format = BuildInfoFormat(rawValue: url.pathExtension.lowercased()), format == .plist || format == .json else {
-                throw MunkiPkgError.invalidConfiguration("Export settings as a .plist or .json file.")
+            guard let format = BuildInfoFormat(rawValue: url.pathExtension.lowercased()) else {
+                throw MunkiPkgError.invalidConfiguration("Export settings as a .plist, .json, .yaml, or .yml file.")
             }
             try BuildInfoStore.write(configuration, toFile: url, format: format)
             statusMessage = "Exported settings"
@@ -164,7 +165,16 @@ final class ProjectEditorModel {
         }
     }
 
-    func build() {
+    func requestBuild() {
+        guard canBuild else { return }
+        if requiresBuildConfirmation() {
+            showsBuildConfirmation = true
+        } else {
+            executeConfirmedBuild()
+        }
+    }
+
+    func executeConfirmedBuild() {
         guard let projectURL, let format = buildInfoDocument?.format else { return }
         do {
             try saveDraft()
@@ -185,6 +195,10 @@ final class ProjectEditorModel {
             try await operations.buildPackage(in: projectURL, options: options, reporter: reporter)
             return projectURL
         }
+    }
+
+    private func requiresBuildConfirmation() -> Bool {
+        return draft.signingEnabled || draft.notarizationMode != .none
     }
 
     func synchronizeBOM() {
@@ -248,6 +262,7 @@ final class ProjectEditorModel {
     }
 
     private func requestProjectAction(_ action: PendingProjectAction) {
+        guard !isRunning else { return }
         if hasUnsavedChanges {
             pendingProjectAction = action
             showsDiscardConfirmation = true

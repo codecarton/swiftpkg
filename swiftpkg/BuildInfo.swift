@@ -194,12 +194,13 @@ public struct PackageConfiguration: Sendable {
         guard let value = values["notarization_info"] else { return nil }
         guard let notary = value as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("notarization_info must be a dictionary") }
         let authentication: NotarizationConfiguration.Authentication
-        if let appleID = notary["apple_id"] as? String, let teamID = notary["team_id"] as? String, let password = notary["password"] as? String {
+        if let appleID = notary["apple_id"] as? String, let teamID = notary["team_id"] as? String {
+            let password = notary["password"] as? String ?? ""
             authentication = .appleID(appleID: appleID, teamID: teamID, password: password)
         } else if let profile = notary["keychain_profile"] as? String {
             authentication = .keychainProfile(profile)
         } else {
-            throw MunkiPkgError.invalidConfiguration("notarization_info must specify apple_id + team_id + password or keychain_profile")
+            throw MunkiPkgError.invalidConfiguration("notarization_info must specify apple_id + team_id or keychain_profile")
         }
         let timeout = (notary["staple_timeout"] as? NSNumber)?.intValue ?? 300
         return NotarizationConfiguration(authentication: authentication, staplingTimeout: timeout)
@@ -221,7 +222,7 @@ private extension NotarizationConfiguration {
     var encodedValues: [String: Any] {
         var values: [String: Any] = ["staple_timeout": staplingTimeout]
         switch authentication {
-        case let .appleID(appleID, teamID, password): values.merge(["apple_id": appleID, "team_id": teamID, "password": password]) { _, new in new }
+        case let .appleID(appleID, teamID, _): values.merge(["apple_id": appleID, "team_id": teamID]) { _, new in new }
         case let .keychainProfile(profile): values["keychain_profile"] = profile
         }
         return values

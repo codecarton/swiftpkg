@@ -121,11 +121,11 @@ public struct PackageSettingsDraft: Equatable, Sendable {
             notarization = NotarizationConfiguration(authentication: .keychainProfile(profile), staplingTimeout: staplingTimeout)
         case .appleID:
             guard let appleID = optional(notarizationAppleID),
-                  let teamID = optional(notarizationTeamID),
-                  let password = optional(notarizationPassword) else {
-                throw MunkiPkgError.invalidConfiguration("Apple ID, team ID, and password are required for Apple ID notarization.")
+                  let teamID = optional(notarizationTeamID) else {
+                throw MunkiPkgError.invalidConfiguration("Apple ID and team ID are required for Apple ID notarization.")
             }
             guard staplingTimeout > 0 else { throw MunkiPkgError.invalidConfiguration("Stapling timeout must be greater than zero.") }
+            let password = optional(notarizationPassword) ?? ""
             notarization = NotarizationConfiguration(
                 authentication: .appleID(appleID: appleID, teamID: teamID, password: password),
                 staplingTimeout: staplingTimeout

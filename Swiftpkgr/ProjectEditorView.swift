@@ -38,7 +38,7 @@ struct ProjectEditorView: View {
                     }
                 Button("Save", systemImage: "square.and.arrow.down.on.square", action: model.save)
                     .disabled(!model.isProjectOpen || model.isRunning || !model.hasUnsavedChanges)
-                Button("Build", systemImage: "hammer", action: model.build)
+                Button("Build", systemImage: "hammer", action: model.requestBuild)
                     .buttonStyle(.borderedProminent)
                     .disabled(!model.canBuild)
                 if model.isRunning {
@@ -59,6 +59,16 @@ struct ProjectEditorView: View {
             Button("Cancel", role: .cancel, action: model.cancelPendingProjectAction)
         } message: {
             Text("Opening or creating another project will discard edits that have not been saved.")
+        }
+        .confirmationDialog(
+            "Build with Signing or Notarization?",
+            isPresented: $model.showsBuildConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Build", action: model.executeConfirmedBuild)
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This package is configured with signing or notarization credentials. Proceed with build?")
         }
     }
 }

@@ -39,7 +39,11 @@ struct ProjectPanelService {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.propertyList, .json]
+        if let yamlType = UTType(filenameExtension: "yaml"), let ymlType = UTType(filenameExtension: "yml") {
+            panel.allowedContentTypes = [.propertyList, .json, yamlType, ymlType]
+        } else {
+            panel.allowedContentTypes = [.propertyList, .json]
+        }
         return panel.runModal() == .OK ? panel.url : nil
     }
 
@@ -48,7 +52,11 @@ struct ProjectPanelService {
         panel.title = "Export Settings"
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = defaultName
-        panel.allowedContentTypes = [.propertyList, .json]
+        if let yamlType = UTType(filenameExtension: "yaml"), let ymlType = UTType(filenameExtension: "yml") {
+            panel.allowedContentTypes = [.propertyList, .json, yamlType, ymlType]
+        } else {
+            panel.allowedContentTypes = [.propertyList, .json]
+        }
         return panel.runModal() == .OK ? panel.url : nil
     }
 

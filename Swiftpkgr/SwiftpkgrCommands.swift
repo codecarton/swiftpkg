@@ -7,9 +7,12 @@ struct SwiftpkgrCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Project…", systemImage: "plus", action: model.createNewProject)
                 .keyboardShortcut("n")
+                .disabled(model.isRunning)
             Button("Open Project…", systemImage: "folder", action: model.chooseProjectToOpen)
                 .keyboardShortcut("o")
+                .disabled(model.isRunning)
             Button("Import Package…", systemImage: "shippingbox.and.arrow.backward", action: model.choosePackageToImport)
+                .disabled(model.isRunning)
         }
 
         CommandGroup(after: .saveItem) {
@@ -24,7 +27,7 @@ struct SwiftpkgrCommands: Commands {
         }
 
         CommandMenu("Package") {
-            Button("Build", systemImage: "hammer", action: model.build)
+            Button("Build", systemImage: "hammer", action: model.requestBuild)
                 .keyboardShortcut("b")
                 .disabled(!model.canBuild)
             Button("Synchronize from Bom.txt", systemImage: "arrow.triangle.2.circlepath", action: model.synchronizeBOM)

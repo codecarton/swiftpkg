@@ -12,7 +12,7 @@ struct BuildView: View {
                 Toggle("Skip stapling", isOn: $model.skipsStapling)
             }
             Section("Actions") {
-                Button("Build Package", systemImage: "hammer", action: model.build)
+                Button("Build Package", systemImage: "hammer", action: model.requestBuild)
                     .buttonStyle(.borderedProminent)
                     .disabled(!model.canBuild)
                 Button("Synchronize from Bom.txt", systemImage: "arrow.triangle.2.circlepath", action: model.synchronizeBOM)
