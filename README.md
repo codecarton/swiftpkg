@@ -7,11 +7,9 @@
 [![License](https://img.shields.io/github/license/codecarton/swiftpkg)](LICENSE)
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
 
-`swiftpkg` is a native toolkit for building Apple installer packages from
-version-control-friendly project directories. Use the command-line tool for
-automation or Swiftpkgr, its macOS desktop companion, for a visual workflow.
-Both are powered by the same Swift implementation of
-[`munki-pkg`](https://github.com/munki/munki-pkg).
+`swiftpkg` is a macOS command-line tool for building Apple installer packages
+from version-control-friendly project directories. It is a Swift implementation
+of [`munki-pkg`](https://github.com/munki/munki-pkg).
 
 ## Install for Mac administrators
 
@@ -72,24 +70,6 @@ Useful options:
 --version              Show the tool version
 ```
 
-## Swiftpkgr desktop app
-
-Swiftpkgr is the native macOS 15+ desktop companion to the macOS 13+
-`swiftpkg` command-line tool. It opens the same project directories and uses
-the same configuration, import, build, and BOM implementation, so projects can
-move between visual and automated workflows without conversion.
-
-Use Swiftpkgr to create, open, or convert package projects; import existing
-installer packages; edit package, distribution, signing, and notarization
-values; and build packages while viewing operation progress. It can import
-plist or JSON settings to prefill the editor and export CLI-compatible plist
-or JSON without losing `${version}` placeholders.
-
-Swiftpkgr also opens existing YAML projects. Standalone settings import and
-export are intentionally limited to plist and JSON. Swiftpkgr is planned for
-inclusion in the same installer package as the CLI; until that packaging work
-is complete, build the app from source with the Xcode command below.
-
 ## Project layout
 
 ```text
@@ -122,8 +102,7 @@ The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
 provides YAML support. The CLI target also builds with:
 
 ```sh
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
 ```
 
 ## Maintainer releases
