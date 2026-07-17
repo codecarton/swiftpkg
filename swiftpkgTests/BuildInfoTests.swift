@@ -105,11 +105,14 @@ struct BuildInfoTests {
         var draft = PackageSettingsDraft.defaults(for: project)
         draft.signingEnabled = true
         draft.signingIdentity = "Developer ID Installer"
+        draft.signingTimestampMode = .disabled
         draft.notarizationMode = .keychainProfile
         draft.notarizationKeychainProfile = "swiftpkg"
 
         let configuration = try draft.validatedConfiguration()
         #expect(configuration.signing?.identity == "Developer ID Installer")
+        #expect(configuration.signing?.usesTimestamp == false)
+        #expect(PackageSettingsDraft(configuration: configuration).signingTimestampMode == .disabled)
         guard case .keychainProfile("swiftpkg") = configuration.notarization?.authentication else {
             Issue.record("Expected keychain profile")
             return

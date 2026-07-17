@@ -48,9 +48,9 @@ public struct PackageSettingsDraft: Equatable, Sendable {
         signingKeychain = configuration.signing?.keychain ?? ""
         additionalCertificateNamesText = configuration.signing?.additionalCertificateNames.joined(separator: "\n") ?? ""
         signingTimestampMode = switch configuration.signing?.usesTimestamp {
-        case true: .enabled
-        case false: .disabled
-        case nil: .automatic
+        case .some(true): .enabled
+        case .some(false): .disabled
+        case .none: .automatic
         }
         staplingTimeout = configuration.notarization?.staplingTimeout ?? 300
         switch configuration.notarization?.authentication {
