@@ -1,276 +1,248 @@
 import Darwin
 import Foundation
 
-struct BuildContext {
-    var info: BuildInfo
-    let project: URL
-    let payload: URL?
-    let scripts: URL?
-    let buildDirectory: URL
-    let temporaryDirectory: URL
-    var componentPlist: URL?
-    var packageInfo: URL
-
-    var output: URL { buildDirectory.appendingPathComponent(info.string("name")!) }
-}
-
-struct PackageBuilder {
+/// Coordinates the stages that produce, sign, and optionally notarize a package.
+struct PackageBuildCoordinator {
     let fileManager: FileManager
     let runner: any ProcessRunning
     let console: Console
 
-    func build(project: URL, options: CLIOptions) throws {
-        let info = try BuildInfoIO.load(project: project, options: options)
-        if ["preserve", "preserve-other"].contains(info.string("ownership") ?? ""), geteuid() != 0 {
-            console.warning("build-info ownership: \(info.string("ownership")!) might require using sudo to build this package.")
+    func buildPackage(in project: URL, configuration: BuildConfiguration) throws {
+        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
+        if packageConfiguration.ownership != .recommended, geteuid() != 0 {
+            console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
+        let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
+        try layout.createBuildDirectoryIfNeeded()
+        try layout.withTemporaryDirectory { temporaryDirectory in
+            let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
+            let scriptPreparer = ScriptPreparer(fileManager: fileManager, console: console)
+            if let scripts = layout.scripts { try scriptPreparer.prepareScripts(in: scripts) }
+            try ComponentPackageBuilder(fileManager: fileManager, runner: runner, console: console)
+                .buildComponent(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
+            if configuration.exportsBOM {
+                try BOMMetadataService(fileManager: fileManager, runner: runner, console: console)
+                    .exportMetadata(from: try packageBOM(for: context.output), to: project)
+            }
+            if packageConfiguration.usesDistributionStyle {
+                try DistributionPackageBuilder(fileManager: fileManager, runner: runner, console: console)
+                    .buildDistribution(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
+            }
+            guard let notarization = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
+            try NotarizationService(runner: runner, console: console)
+                .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
+        }
+    }
+
+    private func packageBOM(for package: URL) throws -> URL {
+        let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--bom", package.path])
+        guard result.status == 0, let path = result.stdoutString.split(whereSeparator: \.isNewline).first else {
+            throw MunkiPkgError.processFailed(tool: "pkgutil", message: "pkgutil returned no BOM path")
+        }
+        return URL(fileURLWithPath: String(path))
+    }
+}
+
+/// Describes the files and directories involved in one package build.
+private struct PackageProjectLayout {
+    let project: URL
+    let payload: URL?
+    let scripts: URL?
+    let buildDirectory: URL
+    let fileManager: FileManager
+
+    init(project: URL, fileManager: FileManager) throws {
+        self.project = project
+        self.fileManager = fileManager
         let payloadURL = project.appendingPathComponent("payload", isDirectory: true)
         let scriptsURL = project.appendingPathComponent("scripts", isDirectory: true)
-        let payload = fileManager.directoryExists(at: payloadURL) ? payloadURL : nil
-        var scripts: URL? = fileManager.directoryExists(at: scriptsURL) ? scriptsURL : nil
-        if let scriptsURL = scripts {
-            let entries = try fileManager.contents(at: scriptsURL).filter { $0 != ".DS_Store" }
-            if entries.isEmpty { scripts = nil }
-        }
-        guard payload != nil || scripts != nil else {
-            throw MunkiPkgError.message("\(project.path) does not contain a payload folder or a scripts folder.")
-        }
-        let buildDirectory = project.appendingPathComponent("build", isDirectory: true)
-        if !fileManager.itemExists(at: buildDirectory) {
-            try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: false)
-        } else if !fileManager.directoryExists(at: buildDirectory) {
-            throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.")
-        }
-        let temporary = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: temporary, withIntermediateDirectories: false)
-        defer { try? fileManager.removeItem(at: temporary) }
-
-        var context = BuildContext(
-            info: info, project: project, payload: payload, scripts: scripts,
-            buildDirectory: buildDirectory, temporaryDirectory: temporary,
-            componentPlist: nil, packageInfo: temporary.appendingPathComponent("PackageInfo")
-        )
-        if let payload, info.bool("suppress_bundle_relocation") {
-            context.componentPlist = try makeComponentPropertyList(payload: payload, temporary: temporary, quiet: options.quiet)
-        }
-        try makePackageInfo(info: info, at: context.packageInfo)
-        try fileManager.removeIfPresent(at: context.output)
-        if let scripts { try prepareScripts(scripts) }
-        try buildComponent(context, options: options)
-        if options.exportBOMInfo { try exportBOM(context) }
-        if info.bool("distribution_style") { try buildDistribution(context, options: options) }
-        if info.dictionary("notarization_info") != nil, !options.skipNotarization, !options.skipSigning {
-            let requestID = try uploadToNotary(context, options: options)
-            if !options.skipStapling, try waitForNotarization(requestID, context: context, options: options) {
-                try staple(context, options: options)
-            }
-        }
+        payload = fileManager.directoryExists(at: payloadURL) ? payloadURL : nil
+        if fileManager.directoryExists(at: scriptsURL), try !fileManager.contents(at: scriptsURL).filter({ $0 != ".DS_Store" }).isEmpty {
+            scripts = scriptsURL
+        } else { scripts = nil }
+        guard payload != nil || scripts != nil else { throw MunkiPkgError.message("\(project.path) does not contain a payload folder or a scripts folder.") }
+        buildDirectory = project.appendingPathComponent("build", isDirectory: true)
     }
 
-    private func makeComponentPropertyList(payload: URL, temporary: URL, quiet: Bool) throws -> URL {
-        let destination = temporary.appendingPathComponent("component.plist")
-        var arguments: [String] = []
-        if quiet { arguments.append("--quiet") }
-        arguments += ["--analyze", "--root", payload.path, destination.path]
-        try requireSuccess(ToolPaths.pkgbuild, arguments, failure: "pkgbuild failed while analyzing payload")
-        let data = try Data(contentsOf: destination)
-        guard var plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]] else {
-            throw MunkiPkgError.message("Couldn't read \(destination.path)")
-        }
-        for index in plist.indices where plist[index]["BundleIsRelocatable"] as? Bool == true {
-            plist[index]["BundleIsRelocatable"] = false
-            if let path = plist[index]["RootRelativeBundlePath"] as? String {
-                console.display("Turning off bundle relocation for \(path)")
-            }
-        }
-        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: destination)
-        return destination
+    func createBuildDirectoryIfNeeded() throws {
+        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: false) }
+        else if !fileManager.directoryExists(at: buildDirectory) { throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.") }
     }
 
-    private func makePackageInfo(info: BuildInfo, at url: URL) throws {
-        let action = info.string("postinstall_action") ?? "none"
-        if action != "none" { console.display("Setting postinstall-action to \(action)") }
-        let preserve = info.bool("preserve_xattr") ? "true" : "false"
-        let xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?><pkg-info postinstall-action=\"\(xmlEscaped(action))\" preserve-xattr=\"\(preserve)\"/>"
-        try Data(xml.utf8).write(to: url)
+    func withTemporaryDirectory(_ body: (URL) throws -> Void) throws {
+        let directory = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? fileManager.removeItem(at: directory) }
+        try body(directory)
     }
+}
 
-    private func prepareScripts(_ scripts: URL) throws {
+/// Holds immutable paths and settings shared by build stages.
+private struct PackageBuildContext {
+    let configuration: PackageConfiguration
+    let layout: PackageProjectLayout
+    let temporaryDirectory: URL
+
+    var output: URL { layout.buildDirectory.appendingPathComponent(configuration.name) }
+}
+
+/// Normalizes installer scripts before package construction.
+private struct ScriptPreparer {
+    let fileManager: FileManager
+    let console: Console
+
+    func prepareScripts(in scripts: URL) throws {
         let dsStore = scripts.appendingPathComponent(".DS_Store")
-        if fileManager.itemExists(at: dsStore) {
-            console.display("Removing .DS_Store file from the scripts folder")
-            try fileManager.removeItem(at: dsStore)
-        }
-        for name in ["preinstall", "postinstall"] {
-            let script = scripts.appendingPathComponent(name)
+        if fileManager.itemExists(at: dsStore) { console.display("Removing .DS_Store file from the scripts folder"); try fileManager.removeItem(at: dsStore) }
+        for scriptName in ["preinstall", "postinstall"] {
+            let script = scripts.appendingPathComponent(scriptName)
             guard fileManager.itemExists(at: script) else { continue }
-            let attributes = try fileManager.attributesOfItem(atPath: script.path)
-            let current = (attributes[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
-            if current & 0o500 != 0o500 {
-                console.display("Making \(name) script executable")
+            let permissions = (try fileManager.attributesOfItem(atPath: script.path)[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
+            if permissions & 0o500 != 0o500 {
+                console.display("Making \(scriptName) script executable")
                 try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
             }
         }
     }
+}
 
-    private func buildComponent(_ context: BuildContext, options: CLIOptions) throws {
-        let info = context.info
-        var args = [
-            "--ownership", info.string("ownership")!,
-            "--identifier", info.string("identifier")!,
-            "--version", info.string("version")!,
-            "--info", context.packageInfo.path
-        ]
-        if let payload = context.payload {
-            args += ["--root", payload.path]
-            if let location = info.string("install_location") { args += ["--install-location", location] }
-        } else { args.append("--nopayload") }
-        if let compression = info.string("compression") { args += ["--compression", compression] }
-        if let component = context.componentPlist { args += ["--component-plist", component.path] }
-        if let minimum = info.string("min-os-version") { args += ["--min-os-version", minimum] }
-        if info.bool("large-payload") { args.append("--large-payload") }
-        if let scripts = context.scripts { args += ["--scripts", scripts.path] }
-        if options.quiet { args.append("--quiet") }
-        if !info.bool("distribution_style") { try addSigningOptions(to: &args, info: info, options: options) }
-        args.append(context.output.path)
-        try requireSuccess(ToolPaths.pkgbuild, args, failure: "Package creation failed.")
+/// Builds a component package with `pkgbuild`.
+private struct ComponentPackageBuilder {
+    let fileManager: FileManager
+    let runner: any ProcessRunning
+    let console: Console
+
+    func buildComponent(using context: PackageBuildContext, isQuiet: Bool, skipsSigning: Bool) throws {
+        let packageInfo = context.temporaryDirectory.appendingPathComponent("PackageInfo")
+        try writePackageInfo(for: context.configuration, to: packageInfo)
+        try fileManager.removeIfPresent(at: context.output)
+        var arguments = ["--ownership", context.configuration.ownership.rawValue, "--identifier", context.configuration.identifier, "--version", context.configuration.version, "--info", packageInfo.path]
+        if let payload = context.layout.payload {
+            arguments += ["--root", payload.path]
+            if let installLocation = context.configuration.installLocation { arguments += ["--install-location", installLocation] }
+            if context.configuration.suppressesBundleRelocation {
+                let componentPlist = try componentPropertyList(for: payload, in: context.temporaryDirectory, isQuiet: isQuiet)
+                arguments += ["--component-plist", componentPlist.path]
+            }
+        } else { arguments.append("--nopayload") }
+        if let compression = context.configuration.compression { arguments += ["--compression", compression.rawValue] }
+        if let minimumOSVersion = context.configuration.minimumOSVersion { arguments += ["--min-os-version", minimumOSVersion] }
+        if context.configuration.usesLargePayload { arguments.append("--large-payload") }
+        if let scripts = context.layout.scripts { arguments += ["--scripts", scripts.path] }
+        if isQuiet { arguments.append("--quiet") }
+        if !context.configuration.usesDistributionStyle, !skipsSigning { appendSigningArguments(&arguments, signing: context.configuration.signing) }
+        arguments.append(context.output.path)
+        try runner.runSuccessfully(executable: ToolPaths.pkgbuild, arguments: arguments, failureMessage: "Package creation failed.")
     }
 
-    private func buildDistribution(_ context: BuildContext, options: CLIOptions) throws {
-        let temporaryOutput = context.buildDirectory.appendingPathComponent("Dist-\(context.info.string("name")!)")
+    private func writePackageInfo(for configuration: PackageConfiguration, to url: URL) throws {
+        if configuration.postInstallAction != .none { console.display("Setting postinstall-action to \(configuration.postInstallAction.rawValue)") }
+        let xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?><pkg-info postinstall-action=\"\(configuration.postInstallAction.rawValue)\" preserve-xattr=\"\(configuration.preservesExtendedAttributes)\"/>"
+        try Data(xml.utf8).write(to: url)
+    }
+
+    private func componentPropertyList(for payload: URL, in temporaryDirectory: URL, isQuiet: Bool) throws -> URL {
+        let destination = temporaryDirectory.appendingPathComponent("component.plist")
+        var arguments = ["--analyze", "--root", payload.path, destination.path]
+        if isQuiet { arguments.insert("--quiet", at: 0) }
+        try runner.runSuccessfully(executable: ToolPaths.pkgbuild, arguments: arguments, failureMessage: "pkgbuild failed while analyzing payload")
+        let data = try Data(contentsOf: destination)
+        guard var propertyList = try PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]] else {
+            throw MunkiPkgError.message("Couldn't read \(destination.path)")
+        }
+        for index in propertyList.indices where propertyList[index]["BundleIsRelocatable"] as? Bool == true {
+            propertyList[index]["BundleIsRelocatable"] = false
+            if let path = propertyList[index]["RootRelativeBundlePath"] as? String { console.display("Turning off bundle relocation for \(path)") }
+        }
+        try PropertyListSerialization.data(fromPropertyList: propertyList, format: .xml, options: 0).write(to: destination)
+        return destination
+    }
+}
+
+/// Builds a distribution package with `productbuild`.
+private struct DistributionPackageBuilder {
+    let fileManager: FileManager
+    let runner: any ProcessRunning
+    let console: Console
+
+    func buildDistribution(using context: PackageBuildContext, isQuiet: Bool, skipsSigning: Bool) throws {
+        let temporaryOutput = context.layout.buildDirectory.appendingPathComponent("Dist-\(context.configuration.name)")
         try fileManager.removeIfPresent(at: temporaryOutput)
         let distribution = context.temporaryDirectory.appendingPathComponent("Distribution")
-        let name = context.info.string("name")!
-        let title = context.info.string("title") ?? name
-        let xml = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <installer-gui-script minSpecVersion="1">
-            <title>\(xmlEscaped(title))</title>
-            <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
-            <choices-outline><line choice="default"/></choices-outline>
-            <choice id="default" visible="false"><pkg-ref id="default"/></choice>
-            <pkg-ref id="default">\(xmlEscaped(name))</pkg-ref>
-        </installer-gui-script>
-        """
+        let title = context.configuration.title ?? context.configuration.name
+        let xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><installer-gui-script minSpecVersion=\"1\"><title>\(xmlEscaped(title))</title><options customize=\"never\" require-scripts=\"false\" hostArchitectures=\"arm64,x86_64\"/><choices-outline><line choice=\"default\"/></choices-outline><choice id=\"default\" visible=\"false\"><pkg-ref id=\"default\"/></choice><pkg-ref id=\"default\">\(xmlEscaped(context.configuration.name))</pkg-ref></installer-gui-script>"
         try Data(xml.utf8).write(to: distribution)
-        var args = ["--distribution", distribution.path, "--package-path", context.buildDirectory.path]
-        if options.quiet { args.append("--quiet") }
-        try addSigningOptions(to: &args, info: context.info, options: options)
-        let requirements = context.project.appendingPathComponent("product-requirements.plist")
-        if fileManager.itemExists(at: requirements) { args += ["--product", requirements.path] }
-        args += [
-            "--identifier", context.info.string("product id") ?? context.info.string("identifier")!,
-            "--version", context.info.string("version")!, temporaryOutput.path
-        ]
-        try requireSuccess(ToolPaths.productbuild, args, failure: "Distribution package creation failed.")
+        var arguments = ["--distribution", distribution.path, "--package-path", context.layout.buildDirectory.path]
+        if isQuiet { arguments.append("--quiet") }
+        if !skipsSigning { appendSigningArguments(&arguments, signing: context.configuration.signing) }
+        let requirements = context.layout.project.appendingPathComponent("product-requirements.plist")
+        if fileManager.itemExists(at: requirements) { arguments += ["--product", requirements.path] }
+        arguments += ["--identifier", context.configuration.productIdentifier ?? context.configuration.identifier, "--version", context.configuration.version, temporaryOutput.path]
+        try runner.runSuccessfully(executable: ToolPaths.productbuild, arguments: arguments, failureMessage: "Distribution package creation failed.")
         console.display("Removing component package \(context.output.path)")
         try fileManager.removeItem(at: context.output)
         console.display("Renaming distribution package \(temporaryOutput.path) to \(context.output.path)")
         try fileManager.moveItem(at: temporaryOutput, to: context.output)
     }
+}
 
-    private func addSigningOptions(to args: inout [String], info: BuildInfo, options: CLIOptions) throws {
-        guard let signing = info.dictionary("signing_info"), !options.skipSigning else { return }
-        console.display("Adding package signing info to command")
-        guard let identity = signing["identity"] as? String else {
-            throw MunkiPkgError.message("Missing identity in signing info!")
-        }
-        args += ["--sign", identity]
-        if let keychain = signing["keychain"] as? String { args += ["--keychain", keychain] }
-        if let certificate = signing["additional_cert_names"] as? String { args += ["--cert", certificate] }
-        if let certificates = signing["additional_cert_names"] as? [String] {
-            for certificate in certificates { args += ["--cert", certificate] }
-        }
-        if let timestamp = signing["timestamp"] as? Bool { args.append(timestamp ? "--timestamp" : "--timestamp=none") }
-    }
+/// Uploads a package to Apple notarization and optionally staples it.
+private struct NotarizationService {
+    let runner: any ProcessRunning
+    let console: Console
 
-    private func exportBOM(_ context: BuildContext) throws {
-        console.display("Extracting bom file from \(context.output.path)")
-        let result = try runner.run(ToolPaths.pkgutil, ["--bom", context.output.path])
-        guard result.status == 0 else { throw MunkiPkgError.message(result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        let bomPath = result.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !bomPath.isEmpty else { throw MunkiPkgError.message("pkgutil returned no BOM path") }
-        console.display("Exporting bom info to \(context.project.appendingPathComponent("Bom.txt").path)")
-        try ProjectOperations(fileManager: fileManager, runner: runner, console: console)
-            .exportBOM(from: URL(fileURLWithPath: bomPath), project: context.project)
-        try? fileManager.removeItem(atPath: bomPath)
-    }
-
-    private func authenticationArguments(_ info: BuildInfo) throws -> [String] {
-        guard let notary = info.dictionary("notarization_info") else { throw MunkiPkgError.message("Missing notarization_info") }
-        if let appleID = notary["apple_id"] as? String,
-           let teamID = notary["team_id"] as? String,
-           let password = notary["password"] as? String {
-            return ["--apple-id", appleID, "--team-id", teamID, "--password", password]
-        }
-        if let profile = notary["keychain_profile"] as? String { return ["--keychain-profile", profile] }
-        throw MunkiPkgError.message("apple_id + team_id + password or keychain_profile must be specified in notarization_info.")
-    }
-
-    private func uploadToNotary(_ context: BuildContext, options: CLIOptions) throws -> String {
+    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) throws {
         console.display("Uploading package to Apple notary service")
-        let args = ["notarytool", "submit", "--output-format", "plist", context.output.path] + (try authenticationArguments(context.info))
-        let output = try runNotary(args, failure: "Notarization upload failed.")
-        guard let id = output["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
-        console.display("id \(id)", toolName: "notarytool")
-        if let message = output["message"] as? String { console.display(message, toolName: "notarytool") }
-        return id
+        let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
+        guard let identifier = submission["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
+        console.display("id \(identifier)", toolName: "notarytool")
+        if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
+        guard !skipsStapling, try waitForAcceptance(identifier, configuration: configuration) else { return }
+        console.display("Stapling package")
+        try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
+        console.display("The staple and validate action worked!")
     }
 
-    private func waitForNotarization(_ id: String, context: BuildContext, options: CLIOptions) throws -> Bool {
-        console.display("Getting notarization state")
-        let notary = context.info.dictionary("notarization_info") ?? [:]
-        let timeout = (notary["staple_timeout"] as? NSNumber)?.intValue ?? 300
-        var elapsed = 0
-        var delay = 5
-        while elapsed < timeout {
-            Thread.sleep(forTimeInterval: TimeInterval(delay))
-            elapsed += delay
-            delay += 5
-            let args = ["notarytool", "info", id, "--output-format", "plist"] + (try authenticationArguments(context.info))
-            let output = try runNotary(args, failure: "Notarization check failed.")
+    private func waitForAcceptance(_ identifier: String, configuration: NotarizationConfiguration) throws -> Bool {
+        var elapsed = 0; var delay = 5
+        while elapsed < configuration.staplingTimeout {
+            Thread.sleep(forTimeInterval: TimeInterval(delay)); elapsed += delay; delay += 5
+            let output = try plistOutput(for: ["notarytool", "info", identifier, "--output-format", "plist"] + authenticationArguments(for: configuration), failureMessage: "Notarization check failed.")
             let status = output["status"] as? String ?? "Unknown"
             let message = output["message"] as? String ?? ""
-            if status == "Accepted" {
-                console.display("Notarization successful. \(message)")
-                return true
-            }
-            if status != "In Progress" && status != "Unknown" {
-                throw MunkiPkgError.message("Notarization failed (\(status)): \(message)")
-            }
+            if status == "Accepted" { console.display("Notarization successful. \(message)"); return true }
+            if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.message("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
         FileHandle.standardError.write(Data("swiftpkg: Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.\n".utf8))
         return false
     }
 
-    private func runNotary(_ arguments: [String], failure: String) throws -> [String: Any] {
-        let result = try runner.run(ToolPaths.xcrun, arguments)
-        guard result.status == 0 else {
-            FileHandle.standardError.write(Data(("notarytool: " + result.stderrString).utf8))
-            throw MunkiPkgError.message(failure)
-        }
-        var data = result.stdout
+    private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
+        let result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
+        guard result.status == 0 else { throw MunkiPkgError.processFailed(tool: "notarytool", message: failureMessage) }
+        let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
             data = Data(result.stdoutString[result.stdoutString.index(after: newline)...].utf8)
+        } else {
+            data = result.stdout
         }
-        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            throw MunkiPkgError.message(failure)
-        }
+        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { throw MunkiPkgError.message(failureMessage) }
         return plist
     }
 
-    private func staple(_ context: BuildContext, options: CLIOptions) throws {
-        console.display("Stapling package")
-        try requireSuccess(ToolPaths.xcrun, ["stapler", "staple", context.output.path], failure: "Stapling failed")
-        console.display("The staple and validate action worked!")
-    }
-
-    private func requireSuccess(_ executable: String, _ arguments: [String], failure: String) throws {
-        let result = try runner.run(executable, arguments)
-        guard result.status == 0 else {
-            let details = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MunkiPkgError.message(details.isEmpty ? failure : "\(failure) \(details)")
+    private func authenticationArguments(for configuration: NotarizationConfiguration) -> [String] {
+        switch configuration.authentication {
+        case let .appleID(appleID, teamID, password): return ["--apple-id", appleID, "--team-id", teamID, "--password", password]
+        case let .keychainProfile(profile): return ["--keychain-profile", profile]
         }
     }
+}
+
+private func appendSigningArguments(_ arguments: inout [String], signing: SigningConfiguration?) {
+    guard let signing else { return }
+    arguments += ["--sign", signing.identity]
+    if let keychain = signing.keychain { arguments += ["--keychain", keychain] }
+    for certificate in signing.additionalCertificateNames { arguments += ["--cert", certificate] }
+    if let usesTimestamp = signing.usesTimestamp { arguments.append(usesTimestamp ? "--timestamp" : "--timestamp=none") }
 }

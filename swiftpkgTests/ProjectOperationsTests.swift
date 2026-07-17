@@ -8,13 +8,12 @@ struct ProjectOperationsTests {
         let temporary = try TemporaryDirectory()
         defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
-        let operations = ProjectOperations(
+        let creator = ProjectCreator(
             fileManager: .default,
-            runner: RecordingRunner(),
             console: makeConsole()
         )
 
-        try operations.createProject(at: project, options: CLIOptions())
+        try creator.createProject(at: project, format: .plist, force: false)
 
         #expect(FileManager.default.directoryExists(at: project.appendingPathComponent("payload")))
         #expect(FileManager.default.directoryExists(at: project.appendingPathComponent("scripts")))
@@ -33,12 +32,12 @@ struct ProjectOperationsTests {
         try write("payload", to: payload.appendingPathComponent("file.txt"))
         try write("file.txt\t100644\t0/0\nempty\t40755\t0/0\n", to: project.appendingPathComponent("Bom.txt"))
 
-        let operations = ProjectOperations(
+        let bomMetadata = BOMMetadataService(
             fileManager: .default,
             runner: RecordingRunner(),
             console: makeConsole()
         )
-        try operations.syncFromBOM(project: project, options: CLIOptions())
+        try bomMetadata.synchronizeMetadataFromBOM(in: project, requestedFormat: nil)
 
         #expect(FileManager.default.itemExists(at: payload.appendingPathComponent("empty")))
         let attributes = try FileManager.default.attributesOfItem(atPath: payload.appendingPathComponent("file.txt").path)
@@ -54,9 +53,9 @@ struct ProjectOperationsTests {
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: false)
         let runner = RecordingRunner()
         runner.result = ProcessResult(status: 0, stdout: Data("path\t100644\t0/0\n".utf8), stderr: Data())
-        let operations = ProjectOperations(fileManager: .default, runner: runner, console: makeConsole())
+        let bomMetadata = BOMMetadataService(fileManager: .default, runner: runner, console: makeConsole())
 
-        try operations.exportBOM(from: URL(fileURLWithPath: "/tmp/archive.bom"), project: project)
+        try bomMetadata.exportMetadata(from: URL(fileURLWithPath: "/tmp/archive.bom"), to: project)
 
         #expect(runner.calls == [
             RecordingRunner.Call(executable: ToolPaths.lsbom, arguments: ["/tmp/archive.bom"])

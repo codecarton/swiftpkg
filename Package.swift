@@ -9,12 +9,16 @@ let package = Package(
         .executable(name: "swiftpkg", targets: ["swiftpkg"])
     ],
     dependencies: [
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.2")
     ],
     targets: [
         .executableTarget(
             name: "swiftpkg",
-            dependencies: ["Yams"],
+            dependencies: [
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "Yams"
+            ],
             path: "swiftpkg"
         ),
         .testTarget(

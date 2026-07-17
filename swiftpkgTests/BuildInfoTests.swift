@@ -3,69 +3,66 @@ import Testing
 @testable import swiftpkg
 
 struct BuildInfoTests {
-    @Test("defaults remove spaces and provide upstream values")
-    func defaultsRemoveSpacesAndProvideUpstreamValues() throws {
-        let project = URL(fileURLWithPath: "/tmp/My Project")
-        let info = BuildInfo.defaults(for: project)
+    @Test("defaults remove spaces and provide typed values")
+    func defaultsRemoveSpacesAndProvideTypedValues() {
+        let configuration = PackageConfiguration.defaults(for: URL(fileURLWithPath: "/tmp/My Project"))
 
-        #expect(info.string("name") == "MyProject-${version}.pkg")
-        #expect(info.string("identifier") == "com.github.munki.pkg.MyProject")
-        #expect(info.string("version") == "1.0")
-        #expect(info.string("ownership") == "recommended")
-        #expect(info.bool("distribution_style") == false)
+        #expect(configuration.name == "MyProject-${version}.pkg")
+        #expect(configuration.identifier == "com.github.munki.pkg.MyProject")
+        #expect(configuration.version == "1.0")
+        #expect(configuration.ownership == .recommended)
+        #expect(!configuration.usesDistributionStyle)
     }
 
-    @Test("loads supported formats and substitutes version", arguments: [BuildInfoFormat.json, .plist, .yaml])
+    @Test("loads supported formats and substitutes version", arguments: [BuildInfoFormat.json, .plist, .yaml, .yml])
     func loadsSupportedFormatsAndSubstitutesVersion(_ format: BuildInfoFormat) throws {
-        let temporary = try TemporaryDirectory()
-        defer { temporary.remove() }
+        let temporary = try TemporaryDirectory(); defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: false)
-        let values: [String: Any] = [
-            "name": "Project-${version}.pkg",
-            "version": "2.5",
-            "title": "Project ${version}",
-            "identifier": "com.example.project",
-            "ownership": "recommended",
-            "postinstall_action": "none"
-        ]
-        let info = BuildInfo(values: values)
-        let options = CLIOptions(json: format == .json, yaml: format == .yaml)
-        try BuildInfoIO.write(info, project: project, options: options)
+        let values: [String: Any] = ["name": "Project-${version}.pkg", "version": "2.5", "title": "Project ${version}", "identifier": "com.example.project", "ownership": "recommended", "postinstall_action": "none"]
+        let configuration = try PackageConfiguration(values: values, defaults: .defaults(for: project))
+        try BuildInfoStore.write(configuration, to: project, format: format)
 
-        let loaded = try BuildInfoIO.load(project: project, options: options)
-        #expect(loaded.string("name") == "Project-2.5.pkg")
-        #expect(loaded.string("title") == "Project 2.5")
-        #expect(loaded.string("identifier") == "com.example.project")
+        let loaded = try BuildInfoStore.load(from: project, requestedFormat: format)
+        #expect(loaded.name == "Project-2.5.pkg")
+        #expect(loaded.title == "Project 2.5")
+        #expect(loaded.identifier == "com.example.project")
     }
 
     @Test("rejects multiple build info files")
     func rejectsMultipleBuildInfoFiles() throws {
-        let temporary = try TemporaryDirectory()
-        defer { temporary.remove() }
+        let temporary = try TemporaryDirectory(); defer { temporary.remove() }
         let project = temporary.url.appendingPathComponent("Project", isDirectory: true)
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: false)
-        let info = BuildInfo.defaults(for: project)
-        try BuildInfoIO.write(info, project: project, options: CLIOptions())
-        try BuildInfoIO.write(info, project: project, options: CLIOptions(json: true))
+        let configuration = PackageConfiguration.defaults(for: project)
+        try BuildInfoStore.write(configuration, to: project, format: .plist)
+        try BuildInfoStore.write(configuration, to: project, format: .json)
 
-        #expect(throws: (any Error).self) {
-            try BuildInfoIO.load(project: project, options: CLIOptions())
-        }
+        #expect(throws: (any Error).self) { try BuildInfoStore.load(from: project, requestedFormat: nil) }
     }
 
-    @Test("rejects illegal build info values")
-    func rejectsIllegalBuildInfoValues() throws {
-        let info = BuildInfo(values: [
-            "name": "Project.pkg",
-            "version": "1.0",
-            "identifier": "com.example.project",
-            "ownership": "invalid",
-            "postinstall_action": "none"
-        ])
+    @Test("decodes nested typed configuration and preserves legacy wire keys")
+    func decodesNestedConfigurationAndPreservesLegacyWireKeys() throws {
+        let project = URL(fileURLWithPath: "/tmp/Project")
+        let values: [String: Any] = [
+            "name": "Project.pkg", "identifier": "com.example.project", "version": "1.0", "ownership": "preserve",
+            "postinstall_action": "restart", "compression": "latest", "product id": "com.example.product",
+            "signing_info": ["identity": "Developer ID", "additional_cert_names": ["CA 1", "CA 2"]],
+            "notarization_info": ["keychain_profile": "notary", "staple_timeout": 120]
+        ]
+        let configuration = try PackageConfiguration(values: values, defaults: .defaults(for: project))
 
+        #expect(configuration.ownership == .preserve)
+        #expect(configuration.compression == .latest)
+        #expect(configuration.postInstallAction == .restart)
+        #expect(configuration.signing?.additionalCertificateNames == ["CA 1", "CA 2"])
+        #expect(configuration.encodedValues["product id"] as? String == "com.example.product")
+    }
+
+    @Test("rejects illegal enum values")
+    func rejectsIllegalEnumValues() {
         #expect(throws: (any Error).self) {
-            try info.validated(source: "test")
+            try PackageConfiguration(values: ["ownership": "invalid"], defaults: .defaults(for: URL(fileURLWithPath: "/tmp/Project")))
         }
     }
 }
