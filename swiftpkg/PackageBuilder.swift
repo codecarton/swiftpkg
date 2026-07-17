@@ -2,19 +2,25 @@ import Darwin
 import Foundation
 
 /// Coordinates the stages that produce, sign, and optionally notarize a package.
-struct PackageBuildCoordinator {
-    let fileManager: FileManager
-    let runner: any ProcessRunning
-    let console: Console
+public struct PackageBuildCoordinator: @unchecked Sendable {
+    public let fileManager: FileManager
+    public let runner: any ProcessRunning
+    public let console: Console
 
-    func buildPackage(in project: URL, configuration: BuildConfiguration) throws {
+    public init(fileManager: FileManager, runner: any ProcessRunning, console: Console) {
+        self.fileManager = fileManager
+        self.runner = runner
+        self.console = console
+    }
+
+    public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
         let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
         let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
         try layout.createBuildDirectoryIfNeeded()
-        try layout.withTemporaryDirectory { temporaryDirectory in
+        try await layout.withTemporaryDirectory { temporaryDirectory in
             let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
             let scriptPreparer = ScriptPreparer(fileManager: fileManager, console: console)
             if let scripts = layout.scripts { try scriptPreparer.prepareScripts(in: scripts) }
@@ -29,7 +35,7 @@ struct PackageBuildCoordinator {
                     .buildDistribution(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
             }
             guard let notarization = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
-            try NotarizationService(runner: runner, console: console)
+            try await NotarizationService(runner: runner, console: console)
                 .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
         }
     }
@@ -69,11 +75,11 @@ private struct PackageProjectLayout {
         else if !fileManager.directoryExists(at: buildDirectory) { throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.") }
     }
 
-    func withTemporaryDirectory(_ body: (URL) throws -> Void) throws {
+    func withTemporaryDirectory(_ body: (URL) async throws -> Void) async throws {
         let directory = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: directory) }
-        try body(directory)
+        try await body(directory)
     }
 }
 
@@ -187,26 +193,28 @@ private struct DistributionPackageBuilder {
 }
 
 /// Uploads a package to Apple notarization and optionally staples it.
-private struct NotarizationService {
+private struct NotarizationService: Sendable {
     let runner: any ProcessRunning
     let console: Console
 
-    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) throws {
+    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws {
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
         guard let identifier = submission["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
         console.display("id \(identifier)", toolName: "notarytool")
         if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
-        guard !skipsStapling, try waitForAcceptance(identifier, configuration: configuration) else { return }
+        guard !skipsStapling, try await waitForAcceptance(identifier, configuration: configuration) else { return }
         console.display("Stapling package")
         try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
         console.display("The staple and validate action worked!")
     }
 
-    private func waitForAcceptance(_ identifier: String, configuration: NotarizationConfiguration) throws -> Bool {
+    private func waitForAcceptance(_ identifier: String, configuration: NotarizationConfiguration) async throws -> Bool {
         var elapsed = 0; var delay = 5
         while elapsed < configuration.staplingTimeout {
-            Thread.sleep(forTimeInterval: TimeInterval(delay)); elapsed += delay; delay += 5
+            try await Task.sleep(for: .seconds(delay))
+            elapsed += delay
+            delay += 5
             let output = try plistOutput(for: ["notarytool", "info", identifier, "--output-format", "plist"] + authenticationArguments(for: configuration), failureMessage: "Notarization check failed.")
             let status = output["status"] as? String ?? "Unknown"
             let message = output["message"] as? String ?? ""

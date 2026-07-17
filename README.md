@@ -72,22 +72,20 @@ Useful options:
 --version              Show the tool version
 ```
 
-## Swiftpkgr desktop app — coming in 0.3.0
+## Swiftpkgr graphical app
 
-Coming in the swiftpkg 0.3.0 release, Swiftpkgr is the native macOS 15+
-desktop companion to the macOS 13+ `swiftpkg` command-line tool. It opens the
-same project directories and uses the same configuration, import, build, and
-BOM implementation, so projects can move between visual and automated
-workflows without conversion.
+Swiftpkgr is the native macOS 15+ frontend included alongside the macOS 13+
+`swiftpkg` command-line tool. It opens the same project directories and uses
+the same configuration, import, build, and BOM implementation.
 
-Swiftpkgr will let you create, open, or convert package projects; import
-existing installer packages; edit package, distribution, signing, and
-notarization values; and build packages while viewing operation progress. It
-will import and export CLI-compatible plist, JSON, or YAML settings without
-losing `${version}` placeholders.
+Use Swiftpkgr to create, open, or convert package projects; import existing
+installer packages; edit package, distribution, signing, and notarization
+values; and build packages while viewing operation progress. It can import
+plist or JSON settings to prefill the editor and export CLI-compatible plist
+or JSON without losing `${version}` placeholders.
 
-Swiftpkgr will be included in the same installer package as the CLI beginning
-with 0.3.0.
+Swiftpkgr also opens existing YAML projects. Standalone settings import and
+export are intentionally limited to plist and JSON.
 
 ## Project layout
 
@@ -121,7 +119,8 @@ The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
 provides YAML support. The CLI target also builds with:
 
 ```sh
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
+xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release build
 ```
 
 ## Maintainer releases

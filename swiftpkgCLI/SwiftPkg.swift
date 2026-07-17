@@ -1,11 +1,12 @@
 import Foundation
+import SwiftPkgCore
 
-enum SwiftPkg {
-    static func run(
+public enum SwiftPkg {
+    public static func run(
         arguments: [String],
         runner: any ProcessRunning = SystemProcessRunner(),
         fileManager: FileManager = .default
-    ) -> Int32 {
+    ) async -> Int32 {
         switch CLIParser.parse(arguments) {
         case .help:
             print(CLIParser.usage)
@@ -51,7 +52,7 @@ enum SwiftPkg {
                             ? "\(project.path) is not a directory."
                             : "\(project.path): Project not found.")
                     }
-                    try PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
+                    try await PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
                         .buildPackage(in: project, configuration: configuration)
                 }
                 return 0

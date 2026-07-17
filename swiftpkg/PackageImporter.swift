@@ -14,13 +14,19 @@ private final class PackageInfoParser: NSObject, XMLParserDelegate {
     }
 }
 
-struct PackageImporter {
-    let fileManager: FileManager
-    let runner: any ProcessRunning
-    let console: Console
+public struct PackageImporter {
+    public let fileManager: FileManager
+    public let runner: any ProcessRunning
+    public let console: Console
+
+    public init(fileManager: FileManager, runner: any ProcessRunning, console: Console) {
+        self.fileManager = fileManager
+        self.runner = runner
+        self.console = console
+    }
 
     /// Imports a package into a new project using the requested configuration format.
-    func importPackage(at package: URL, to project: URL, format: BuildInfoFormat) throws {
+    public func importPackage(at package: URL, to project: URL, format: BuildInfoFormat) throws {
         guard !fileManager.itemExists(at: project) else {
             throw MunkiPkgError.message("Directory \(project.path) already exists.")
         }

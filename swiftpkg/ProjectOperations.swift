@@ -2,11 +2,21 @@ import Darwin
 import Foundation
 
 /// Creates the conventional directory and configuration layout for a package project.
-struct ProjectCreator {
-    let fileManager: FileManager
-    let console: Console
+public struct ProjectCreator {
+    public let fileManager: FileManager
+    public let console: Console
 
-    func createProject(at project: URL, format: BuildInfoFormat, force: Bool) throws {
+    public init(fileManager: FileManager, console: Console) {
+        self.fileManager = fileManager
+        self.console = console
+    }
+
+    public func createProject(
+        at project: URL,
+        format: BuildInfoFormat,
+        force: Bool,
+        configuration: PackageConfiguration? = nil
+    ) throws {
         if fileManager.itemExists(at: project), !force {
             throw MunkiPkgError.message("\(project.path) already exists! Use --force to convert it to a project directory.")
         }
@@ -18,19 +28,25 @@ struct ProjectCreator {
             guard !fileManager.itemExists(at: directory) else { throw MunkiPkgError.message("\(directory.path) already exists") }
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
         }
-        try BuildInfoStore.write(.defaults(for: project), to: project, format: format)
+        try BuildInfoStore.write(configuration ?? .defaults(for: project), to: project, format: format)
         try ProjectSupport(fileManager: fileManager).writeGitignore(in: project)
         console.display("Created new package project at \(project.path)")
     }
 }
 
 /// Exports and applies tracked BOM metadata for a package project.
-struct BOMMetadataService {
-    let fileManager: FileManager
-    let runner: any ProcessRunning
-    let console: Console
+public struct BOMMetadataService {
+    public let fileManager: FileManager
+    public let runner: any ProcessRunning
+    public let console: Console
 
-    func exportMetadata(from bom: URL, to project: URL) throws {
+    public init(fileManager: FileManager, runner: any ProcessRunning, console: Console) {
+        self.fileManager = fileManager
+        self.runner = runner
+        self.console = console
+    }
+
+    public func exportMetadata(from bom: URL, to project: URL) throws {
         let result = try runner.run(executable: ToolPaths.lsbom, arguments: [bom.path])
         guard result.status == 0 else {
             throw MunkiPkgError.processFailed(tool: "lsbom", message: result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -38,7 +54,7 @@ struct BOMMetadataService {
         try result.stdout.write(to: project.appendingPathComponent("Bom.txt"), options: .atomic)
     }
 
-    func hasNonRecommendedOwnership(in project: URL) -> Bool {
+    public func hasNonRecommendedOwnership(in project: URL) -> Bool {
         let url = project.appendingPathComponent("Bom.txt")
         guard let contents = try? String(contentsOf: url, encoding: .utf8) else { return false }
         return contents.split(whereSeparator: \.isNewline).contains { line in
@@ -47,7 +63,7 @@ struct BOMMetadataService {
         }
     }
 
-    func synchronizeMetadataFromBOM(in project: URL, requestedFormat: BuildInfoFormat?) throws {
+    public func synchronizeMetadataFromBOM(in project: URL, requestedFormat: BuildInfoFormat?) throws {
         let bom = project.appendingPathComponent("Bom.txt")
         let payload = project.appendingPathComponent("payload", isDirectory: true)
         guard fileManager.itemExists(at: bom) else { throw MunkiPkgError.message("Can't sync with bom info: no Bom.txt found in project directory.") }
