@@ -36,6 +36,9 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Skip stapling after notarization.")
     public var skipStapling = false
 
+    @Flag(name: .long, help: "Write a <pkg>.provenance.json sidecar (tool version, build time, git commit/remote, input digest, package hash) for supply-chain attestation.")
+    public var provenance = false
+
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
 
@@ -84,7 +87,8 @@ public enum CLICommand {
                 isQuiet: options.quiet,
                 skipsSigning: options.skipSigning,
                 skipsNotarization: options.skipNotarization,
-                skipsStapling: options.skipStapling
+                skipsStapling: options.skipStapling,
+                writesProvenance: options.provenance
             )
         )
     }
@@ -119,6 +123,7 @@ public enum CLIParser {
       --skip-signing          Skip configured package signing.
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
+      --provenance            Write a <pkg>.provenance.json attestation sidecar.
     """
 
     public static func parse(_ arguments: [String]) -> CLIParseResult {

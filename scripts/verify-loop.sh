@@ -71,6 +71,24 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+PROVENANCE="$WORK/Provenance"
+run "$BIN" --create "$PROVENANCE"
+mkdir -p "$PROVENANCE/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$PROVENANCE/payload/usr/local/bin/tool"
+run "$BIN" --provenance "$PROVENANCE"
+test -f "$PROVENANCE/build/Provenance-1.0.pkg.provenance.json"
+python3 - "$PROVENANCE/build/Provenance-1.0.pkg.provenance.json" "$PROVENANCE/build/Provenance-1.0.pkg" <<'PY'
+import hashlib, json, sys
+prov = json.load(open(sys.argv[1]))
+for key in ("tool", "tool_version", "built_at", "name", "version", "identifier", "pkg_path", "sha256", "input_digest"):
+    assert key in prov, f"provenance missing key: {key}"
+assert prov["tool"] == "swiftpkg"
+digest = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+assert prov["sha256"] == digest, f'sha256 mismatch: {prov["sha256"]} != {digest}'
+assert len(prov["input_digest"]) == 64
+print("provenance OK")
+PY
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"

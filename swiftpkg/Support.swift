@@ -138,6 +138,7 @@ enum ToolPaths {
     static let pkgutil = "/usr/sbin/pkgutil"
     static let productbuild = "/usr/bin/productbuild"
     static let xcrun = "/usr/bin/xcrun"
+    static let git = "/usr/bin/git"
 }
 
 extension FileManager {
