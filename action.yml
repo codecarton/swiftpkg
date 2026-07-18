@@ -1,0 +1,114 @@
+name: 'swiftpkg build'
+description: 'Build an Apple installer package from a swiftpkg project directory'
+author: 'codecarton'
+
+inputs:
+  project-path:
+    description: 'Path to the swiftpkg package project directory'
+    required: true
+  version:
+    description: 'Override the build-info version (e.g. a git tag). Maps to --pkg-version.'
+    required: false
+    default: ''
+  output-dir:
+    description: 'Directory to write the built package into. Maps to --output-dir.'
+    required: false
+    default: 'dist'
+  swiftpkg-version:
+    description: 'Release tag of swiftpkg to install, or "latest".'
+    required: false
+    default: 'latest'
+  lint:
+    description: 'If "true", run `swiftpkg --lint` before building and fail on lint errors.'
+    required: false
+    default: 'false'
+  verify:
+    description: 'If "true", pass --verify so a signed/notarized build is checked after building.'
+    required: false
+    default: 'false'
+  provenance:
+    description: 'If "true", pass --provenance to write a <pkg>.provenance.json sidecar.'
+    required: false
+    default: 'false'
+  extra-args:
+    description: 'Additional arguments appended to the swiftpkg build invocation.'
+    required: false
+    default: ''
+
+outputs:
+  pkg-path:
+    description: 'Path to the built package'
+    value: ${{ steps.build.outputs.pkg-path }}
+  version:
+    description: 'Version of the built package'
+    value: ${{ steps.build.outputs.version }}
+  sha256:
+    description: 'SHA-256 of the built package'
+    value: ${{ steps.build.outputs.sha256 }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install swiftpkg
+      shell: bash
+      env:
+        SWIFTPKG_VERSION: ${{ inputs.swiftpkg-version }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        runner_tmp="${RUNNER_TEMP:-/tmp}"
+        # swiftpkg releases a Universal installer package named
+        # swiftpkg-<version>-universal.pkg; the version is embedded in the
+        # filename, so match it with a pattern rather than a fixed URL.
+        if [ "$SWIFTPKG_VERSION" = "latest" ]; then
+          gh release download --repo codecarton/swiftpkg \
+            --pattern 'swiftpkg-*-universal.pkg' --dir "$runner_tmp"
+        else
+          gh release download "$SWIFTPKG_VERSION" --repo codecarton/swiftpkg \
+            --pattern 'swiftpkg-*-universal.pkg' --dir "$runner_tmp"
+        fi
+        sudo installer -pkg "$runner_tmp"/swiftpkg-*-universal.pkg -target /
+        swiftpkg --version
+
+    - name: Lint
+      if: ${{ inputs.lint == 'true' }}
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+      run: swiftpkg --lint "$PROJECT_PATH"
+
+    - name: Build
+      id: build
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+        PKG_VERSION: ${{ inputs.version }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        DO_VERIFY: ${{ inputs.verify }}
+        DO_PROVENANCE: ${{ inputs.provenance }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        set -euo pipefail
+        # extra-args first so the action's required flags (json output,
+        # output-dir) always win and can't be overridden into a shape that
+        # breaks jq parsing.
+        args=()
+        if [ -n "$EXTRA_ARGS" ]; then
+          read -ra extra <<< "$EXTRA_ARGS"
+          args+=("${extra[@]}")
+        fi
+        args+=(--output-format json --output-dir "$OUTPUT_DIR")
+        if [ -n "$PKG_VERSION" ]; then
+          args+=(--pkg-version "$PKG_VERSION")
+        fi
+        if [ "$DO_VERIFY" = "true" ]; then
+          args+=(--verify)
+        fi
+        if [ "$DO_PROVENANCE" = "true" ]; then
+          args+=(--provenance)
+        fi
+        result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
+        echo "$result"
+        echo "pkg-path=$(echo "$result" | jq -r '.pkg_path')" >> "$GITHUB_OUTPUT"
+        echo "version=$(echo "$result" | jq -r '.version')" >> "$GITHUB_OUTPUT"
+        echo "sha256=$(echo "$result" | jq -r '.sha256')" >> "$GITHUB_OUTPUT"
