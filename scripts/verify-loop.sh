@@ -79,6 +79,17 @@ run "$BIN" --pkg-version 3.1.4 --output-dir "$WORK/artifacts" "$OVERRIDE"
 test -f "$WORK/artifacts/Override-3.1.4.pkg"
 test ! -e "$OVERRIDE/build/Override-3.1.4.pkg"
 
+DYNAMIC="$WORK/Dynamic"
+run "$BIN" --create --json "$DYNAMIC"
+printf '%s\n' '{' '  "name": "Dyn-${version}.pkg",' '  "identifier": "com.example.dynamic",' '  "version": "${DATE}"' '}' > "$DYNAMIC/build-info.json"
+printf '%s\n' 'dyn' > "$DYNAMIC/payload/marker.txt"
+run "$BIN" "$DYNAMIC"
+DYN_PKG=$(ls "$DYNAMIC/build/")
+case "$DYN_PKG" in
+    Dyn-[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].pkg) printf 'dynamic version OK: %s\n' "$DYN_PKG" ;;
+    *) printf 'unexpected dynamic package name: %s\n' "$DYN_PKG" >&2; exit 1 ;;
+esac
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"
