@@ -1,4 +1,4 @@
-# Swiftpkg release installer project
+# Swiftpkg combined release installer project
 
 This is the reusable Swiftpkg project for the combined macOS release
 installer. The release script copies this project to a temporary directory and
@@ -35,9 +35,10 @@ Run the complete release workflow from the repository root:
 ```
 
 `--check` is read-only. `--build` can run on a working branch and saves the
-signed, notarized installer plus `SHA256SUMS` under `dist/` without making Git
-or GitHub changes. `--publish` requires a clean `main` checkout and performs
-the external Apple, Git, and GitHub operations.
+signed, notarized combined installer, CLI installer, app archive, CLI archive,
+and `SHA256SUMS` under `dist/` without making Git or GitHub changes. `--publish`
+requires a clean `main` checkout and performs the external Apple, Git, and
+GitHub operations.
 
 The script reads the release number from `VERSION`, validates it against the
 Swift and Xcode version sources, exports Universal 2 Release products from
@@ -47,4 +48,4 @@ and staples the final installer using this project's settings.
 
 After validation, the script pushes `main`, explicitly pushes the
 `v<version>` tag, and creates or updates the corresponding GitHub Release with
-the installer and `SHA256SUMS`.
+all installer and Homebrew artifacts plus `SHA256SUMS`.
