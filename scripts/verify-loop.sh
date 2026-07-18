@@ -71,6 +71,21 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+LINTGOOD="$WORK/LintGood"
+run "$BIN" --create "$LINTGOOD"
+mkdir -p "$LINTGOOD/payload"
+printf 'x\n' > "$LINTGOOD/payload/file.txt"
+run "$BIN" --lint "$LINTGOOD"
+LINTBAD="$WORK/LintBad"
+mkdir -p "$LINTBAD/payload"
+printf 'x\n' > "$LINTBAD/payload/file.txt"
+printf '%s\n' '{"name":"../evil.pkg","identifier":"com.example.bad","version":""}' > "$LINTBAD/build-info.json"
+if "$BIN" --lint "$LINTBAD"; then
+    printf 'lint should have failed on a bad project\n' >&2
+    exit 1
+fi
+printf 'lint rejects bad project OK\n'
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"
