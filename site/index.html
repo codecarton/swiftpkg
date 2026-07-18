@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Build dependable macOS installer packages from the command line, with the native Swiftpkgr desktop app coming in 0.3.0.">
+  <meta name="description" content="Build dependable macOS installer packages from the swiftpkg CLI or the native Swiftpkgr desktop app.">
   <meta name="theme-color" content="#f2f0e8">
   <meta property="og:type" content="website">
   <meta property="og:title" content="swiftpkg — Build better macOS installer packages">
-  <meta property="og:description" content="The swiftpkg CLI today, plus the native Swiftpkgr desktop app coming in 0.3.0.">
+  <meta property="og:description" content="One portable package workflow for the swiftpkg CLI and native Swiftpkgr desktop app.">
   <meta property="og:url" content="https://codecarton.github.io/swiftpkg/">
   <meta property="og:image" content="https://codecarton.github.io/swiftpkg/assets/og.png">
   <meta property="og:image:width" content="1731">
@@ -15,7 +15,7 @@
   <meta property="og:image:alt" content="swiftpkg shown beside a precise charcoal package-build control panel with an orange status control.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="swiftpkg — Build better macOS installer packages">
-  <meta name="twitter:description" content="The swiftpkg CLI today, plus the native Swiftpkgr desktop app coming in 0.3.0.">
+  <meta name="twitter:description" content="One portable package workflow for the swiftpkg CLI and native Swiftpkgr desktop app.">
   <meta name="twitter:image" content="https://codecarton.github.io/swiftpkg/assets/og.png">
   <title>swiftpkg — macOS package building, without the noise</title>
   <link rel="stylesheet" href="styles.css">
@@ -41,12 +41,12 @@
       <div class="hero-copy">
         <p class="eyebrow"><span></span> macOS packaging, made practical</p>
         <h1>The munki-pkg<br>workflow, rebuilt<br><em>in Swift</em></h1>
-        <p class="lede">Build from the command line today. In 0.3.0, the native Swiftpkgr desktop app brings the same dependable package workflow to a focused visual workspace.</p>
+        <p class="lede">Build from the command line or open the same project in Swiftpkgr, the native desktop app included with swiftpkg 0.3.0.</p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/codecarton/swiftpkg/releases/latest">Get swiftpkg <span aria-hidden="true">→</span></a>
           <a class="button button-quiet" href="#workflow">See the workflow <span aria-hidden="true">↓</span></a>
         </div>
-        <p class="availability"><span class="status-dot" aria-hidden="true"></span> macOS 13+ · Universal 2 · GPL-3.0-or-later</p>
+        <p class="availability"><span class="status-dot" aria-hidden="true"></span> CLI macOS 13+ · Swiftpkgr macOS 15+ · Universal 2</p>
       </div>
 
       <div class="hero-art" aria-label="Example swiftpkg terminal command">
@@ -98,15 +98,15 @@
 
     <section class="desktop section" id="desktop-app">
       <div class="desktop-copy">
-        <p class="eyebrow"><span></span> Coming in 0.3.0 · Meet Swiftpkgr</p>
+        <p class="eyebrow"><span></span> Included in 0.3.0 · Meet Swiftpkgr</p>
         <h2>A desktop workspace<br>for package projects.</h2>
-        <p>Arriving in swiftpkg 0.3.0, Swiftpkgr brings the same package engine and portable project format into a native macOS app. Create a project, import an existing installer, edit its settings, and follow the build from one focused workspace.</p>
+        <p>Swiftpkgr brings the same package engine and portable project format into a native macOS app. Create a project, import an existing installer, edit its settings, and follow the build from one focused workspace.</p>
         <ul>
           <li><b>Edit with confidence</b><span>Work with package, distribution, signing, and notarization settings in a structured editor.</span></li>
           <li><b>Move between app and CLI</b><span>Open the same plist, JSON, or YAML projects without converting them to a proprietary format.</span></li>
           <li><b>See the work happen</b><span>Build packages and follow operation progress without leaving the app.</span></li>
         </ul>
-        <p class="desktop-availability">Swiftpkgr requires macOS 15 or later and will ship in the swiftpkg 0.3.0 installer.</p>
+        <p class="desktop-availability">Swiftpkgr requires macOS 15 or later and is included with the signed and notarized swiftpkg 0.3.0 installer.</p>
       </div>
       <div class="app-window glow-panel" aria-label="Swiftpkgr desktop app preview">
         <div class="app-titlebar">
@@ -157,18 +157,18 @@
       <p class="eyebrow"><span></span> Built for the environment you manage</p>
       <div class="compat-grid">
         <h2>Native to macOS.<br>Ready for your fleet.</h2>
-        <div><b>macOS 13+</b><span>Supported operating-system baseline</span></div>
+        <div><b>CLI · macOS 13+</b><span>Automate package work from the command line</span></div>
+        <div><b>Swiftpkgr · macOS 15+</b><span>Use the same projects in a native desktop app</span></div>
         <div><b>Universal 2</b><span>Apple silicon and Intel release artifact</span></div>
         <div><b>Munki · Jamf</b><span>Deploy the signed installer with your existing tooling</span></div>
-        <div><b>Swift 6</b><span>Modern source build for contributors and early evaluators</span></div>
       </div>
     </section>
 
     <section class="closing">
       <p class="eyebrow"><span></span> Follow the project</p>
       <h2>Your next package<br>deserves a better build.</h2>
-      <p>The latest swiftpkg release is available on GitHub. Download it, verify its checksum, and put a cleaner package workflow to work.</p>
-      <a class="button button-primary" href="https://github.com/codecarton/swiftpkg/releases/latest">Get swiftpkg <span aria-hidden="true">↗</span></a>
+      <p>Download the signed installer from GitHub and choose the CLI or Swiftpkgr whenever the work calls for it.</p>
+      <a class="button button-primary" href="https://github.com/codecarton/swiftpkg/releases/latest">Get swiftpkg 0.3.0 <span aria-hidden="true">↗</span></a>
     </section>
   </main>
 
