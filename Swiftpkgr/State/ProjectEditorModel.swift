@@ -192,7 +192,7 @@ final class ProjectEditorModel {
             skipsStapling: skipsStapling
         )
         let reporter = makeReporter()
-        runOperation("Building package…") { [operations] in
+        runOperation("Building package…", revealsBuiltPackage: true) { [operations] in
             try await operations.buildPackage(in: projectURL, options: options, reporter: reporter)
             return projectURL
         }
@@ -292,6 +292,7 @@ final class ProjectEditorModel {
 
     private func runOperation(
         _ message: String,
+        revealsBuiltPackage: Bool = false,
         operation: @escaping @Sendable () async throws -> URL
     ) {
         guard !isRunning else { return }
@@ -308,6 +309,9 @@ final class ProjectEditorModel {
                 openProject(at: project)
                 statusMessage = "Completed"
                 activityLog.append("Completed")
+                if revealsBuiltPackage {
+                    revealBuiltPackage()
+                }
             } catch {
                 isRunning = false
                 operationTask = nil
