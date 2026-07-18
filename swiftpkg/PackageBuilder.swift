@@ -15,6 +15,7 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
 
     public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
         let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
+        try Self.validatePackageName(packageConfiguration.name)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
@@ -46,6 +47,25 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
             throw MunkiPkgError.processFailed(tool: "pkgutil", message: "pkgutil returned no BOM path")
         }
         return URL(fileURLWithPath: String(path))
+    }
+
+    /// Rejects a package `name` that could escape the build directory.
+    ///
+    /// The output package path is `build/<name>` (and `build/Dist-<name>` for
+    /// distribution builds), so a `name` containing a path separator or `..`
+    /// would write the artifact outside `build/`. Require a single, safe path
+    /// component. Called with the post-`${version}`-substitution name.
+    static func validatePackageName(_ name: String) throws {
+        guard !name.isEmpty,
+              name != ".", name != "..",
+              !name.contains("/"),
+              !name.contains("\0"),
+              URL(fileURLWithPath: name).lastPathComponent == name
+        else {
+            throw MunkiPkgError.invalidConfiguration(
+                "Package name \"\(name)\" must be a single path component (no \"/\" or \"..\")."
+            )
+        }
     }
 }
 
