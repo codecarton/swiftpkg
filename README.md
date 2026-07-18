@@ -173,11 +173,9 @@ immutable CLI and app URLs and checksums to `codecarton/homebrew-tap`, where
 automation opens one tested formula-and-cask update pull request. The dispatch
 token should be limited to that tap repository.
 
-The tag workflow retains an unsigned CI build as a validation fallback, but
-never publishes its artifacts. Only the trusted signing workflow creates the
-immutable GitHub Release. See [VERIFICATION.md](VERIFICATION.md),
-[CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for project
-processes.
+Only the trusted signing workflow creates the immutable GitHub Release. See
+[VERIFICATION.md](VERIFICATION.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
+[SECURITY.md](SECURITY.md) for project processes.
 
 ## Marketing site
 
