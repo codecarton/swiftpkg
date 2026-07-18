@@ -14,24 +14,67 @@ of [`munki-pkg`](https://github.com/munki/munki-pkg). `Swiftpkgr` is its native
 macOS desktop app. Both frontends use the same `SwiftPkgCore` package engine and
 open the same portable projects.
 
-## Install swiftpkg and Swiftpkgr
+## Quick start
 
-Download `SHA256SUMS` and the appropriate signed, notarized artifact from the
-matching GitHub Release:
+Install the CLI and desktop app independently from the official
+[`codecarton/homebrew-tap`](https://github.com/codecarton/homebrew-tap):
 
-- `swiftpkg-<version>-combined.pkg` installs both the CLI and Swiftpkgr and
-  requires macOS 15 or later.
-- `swiftpkg-<version>-cli.pkg` installs only the CLI and requires macOS 13 or
-  later.
-- `Swiftpkgr-<version>.zip` contains only the macOS 15+ app.
+```sh
+brew install codecarton/tap/swiftpkg
+brew install --cask codecarton/tap/swiftpkgr
+swiftpkg --version
+```
+
+The `swiftpkg` formula requires macOS 13 or later. The `swiftpkgr` cask requires
+macOS 15 or later and installs `Swiftpkgr.app` in `/Applications`.
+
+Create and build your first package project:
+
+```sh
+swiftpkg --create MyPackage
+swiftpkg MyPackage
+```
+
+Open `MyPackage` in Swiftpkgr whenever you want to edit or build the same
+project visually. Keep both tools current through Homebrew:
+
+```sh
+brew update
+brew upgrade swiftpkg
+brew upgrade --cask swiftpkgr
+```
+
+Remove either tool independently:
+
+```sh
+brew uninstall swiftpkg
+brew uninstall --cask swiftpkgr
+```
+
+## Signed release downloads
+
+The signed and notarized
+[swiftpkg 0.3.1 release](https://github.com/codecarton/swiftpkg/releases/tag/v0.3.1)
+provides these immutable resources:
+
+- [`swiftpkg-0.3.1-combined.pkg`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/swiftpkg-0.3.1-combined.pkg)
+  installs both the CLI and Swiftpkgr and requires macOS 15 or later.
+- [`swiftpkg-0.3.1-cli.pkg`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/swiftpkg-0.3.1-cli.pkg)
+  installs only the CLI and requires macOS 13 or later.
+- [`Swiftpkgr-0.3.1.zip`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/Swiftpkgr-0.3.1.zip)
+  contains only the macOS 15+ app.
+- [`swiftpkg-0.3.1-universal.tar.gz`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/swiftpkg-0.3.1-universal.tar.gz)
+  is the Universal 2 CLI archive consumed by the Homebrew formula.
+- [`SHA256SUMS`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/SHA256SUMS)
+  covers every downloadable release artifact.
 
 Verify a package download before installation:
 
 ```sh
-grep ' swiftpkg-<version>-combined.pkg$' SHA256SUMS | shasum -a 256 -c -
-pkgutil --check-signature swiftpkg-<version>-combined.pkg
-xcrun stapler validate swiftpkg-<version>-combined.pkg
-sudo installer -pkg swiftpkg-<version>-combined.pkg -target /
+grep ' swiftpkg-0.3.1-combined.pkg$' SHA256SUMS | shasum -a 256 -c -
+pkgutil --check-signature swiftpkg-0.3.1-combined.pkg
+xcrun stapler validate swiftpkg-0.3.1-combined.pkg
+sudo installer -pkg swiftpkg-0.3.1-combined.pkg -target /
 swiftpkg --version
 ```
 
@@ -41,7 +84,7 @@ Jamf Pro, or another management system; do not repackage its contents. Use the
 CLI package when managed Macs do not need the app. The ZIP can be expanded and
 `Swiftpkgr.app` moved to `/Applications` for an app-only installation.
 
-To uninstall, remove `/usr/local/bin/swiftpkg` and
+To uninstall a package-based installation, remove `/usr/local/bin/swiftpkg` and
 `/Applications/Swiftpkgr.app`, then optionally forget the
 `com.codecarton.swiftpkg.installer` or
 `com.codecarton.swiftpkg.cli.installer` receipt after confirming it is not
