@@ -7,9 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9F1E11A7300410D6000A60D7 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 9F1E11A9300410D6000A60D7 /* ArgumentParser */; };
 		9E13F8733004711C000A60D7 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 9E13F8753004711C000A60D7 /* Yams */; };
+		9F1E11A7300410D6000A60D7 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 9F1E11A9300410D6000A60D7 /* ArgumentParser */; };
+		A10000000000000000000011 /* libSwiftPkgCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* libSwiftPkgCore.a */; };
+		A10000000000000000000012 /* libSwiftPkgCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* libSwiftPkgCore.a */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9E13F8613004711C000A60D7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000031;
+			remoteInfo = SwiftPkgCore;
+		};
+		A10000000000000000000022 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9E13F8613004711C000A60D7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000031;
+			remoteInfo = SwiftPkgCore;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		9E13F8673004711C000A60D7 /* CopyFiles */ = {
@@ -25,12 +44,37 @@
 
 /* Begin PBXFileReference section */
 		9E13F8693004711C000A60D7 /* swiftpkg */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = swiftpkg; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000003 /* libSwiftPkgCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSwiftPkgCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000004 /* Swiftpkgr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Swiftpkgr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		9EDD37C7300B19C600577931 /* Exceptions for "swiftpkg" folder in "Swiftpkgr" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppIcon.icon,
+			);
+			target = A10000000000000000000032 /* Swiftpkgr */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9E13F86B3004711C000A60D7 /* swiftpkg */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9EDD37C7300B19C600577931 /* Exceptions for "swiftpkg" folder in "Swiftpkgr" target */,
+			);
 			path = swiftpkg;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000001 /* swiftpkgCLI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = swiftpkgCLI;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000002 /* Swiftpkgr */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Swiftpkgr;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -40,8 +84,24 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000011 /* libSwiftPkgCore.a in Frameworks */,
 				9F1E11A7300410D6000A60D7 /* ArgumentParser in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000041 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 				9E13F8733004711C000A60D7 /* Yams in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000042 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000012 /* libSwiftPkgCore.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +112,8 @@
 			isa = PBXGroup;
 			children = (
 				9E13F86B3004711C000A60D7 /* swiftpkg */,
+				A10000000000000000000001 /* swiftpkgCLI */,
+				A10000000000000000000002 /* Swiftpkgr */,
 				9E13F86A3004711C000A60D7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,7 +121,9 @@
 		9E13F86A3004711C000A60D7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000003 /* libSwiftPkgCore.a */,
 				9E13F8693004711C000A60D7 /* swiftpkg */,
+				A10000000000000000000004 /* Swiftpkgr.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -78,18 +142,63 @@
 			buildRules = (
 			);
 			dependencies = (
+				A10000000000000000000061 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				9E13F86B3004711C000A60D7 /* swiftpkg */,
+				A10000000000000000000001 /* swiftpkgCLI */,
 			);
 			name = swiftpkg;
 			packageProductDependencies = (
 				9F1E11A9300410D6000A60D7 /* ArgumentParser */,
-				9E13F8753004711C000A60D7 /* Yams */,
 			);
-			productName = "swiftpkg";
+			productName = swiftpkg;
 			productReference = 9E13F8693004711C000A60D7 /* swiftpkg */;
 			productType = "com.apple.product-type.tool";
+		};
+		A10000000000000000000031 /* SwiftPkgCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000051 /* Build configuration list for PBXNativeTarget "SwiftPkgCore" */;
+			buildPhases = (
+				A10000000000000000000043 /* Sources */,
+				A10000000000000000000041 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9E13F86B3004711C000A60D7 /* swiftpkg */,
+			);
+			name = SwiftPkgCore;
+			packageProductDependencies = (
+				9E13F8753004711C000A60D7 /* Yams */,
+			);
+			productName = SwiftPkgCore;
+			productReference = A10000000000000000000003 /* libSwiftPkgCore.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		A10000000000000000000032 /* Swiftpkgr */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000052 /* Build configuration list for PBXNativeTarget "Swiftpkgr" */;
+			buildPhases = (
+				A10000000000000000000044 /* Sources */,
+				A10000000000000000000042 /* Frameworks */,
+				A10000000000000000000045 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000062 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000002 /* Swiftpkgr */,
+			);
+			name = Swiftpkgr;
+			packageProductDependencies = (
+			);
+			productName = Swiftpkgr;
+			productReference = A10000000000000000000004 /* Swiftpkgr.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -102,6 +211,12 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					9E13F8683004711C000A60D7 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					A10000000000000000000031 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					A10000000000000000000032 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -124,10 +239,22 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				A10000000000000000000031 /* SwiftPkgCore */,
 				9E13F8683004711C000A60D7 /* swiftpkg */,
+				A10000000000000000000032 /* Swiftpkgr */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000045 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		9E13F8653004711C000A60D7 /* Sources */ = {
@@ -137,7 +264,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000043 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000044 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000061 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000031 /* SwiftPkgCore */;
+			targetProxy = A10000000000000000000021 /* PBXContainerItemProxy */;
+		};
+		A10000000000000000000062 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000031 /* SwiftPkgCore */;
+			targetProxy = A10000000000000000000022 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		9E13F86E3004711C000A60D7 /* Debug */ = {
@@ -195,7 +349,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -255,7 +409,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -271,11 +425,13 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = DPXY7JLK67;
 				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.codecarton.swiftpkg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -286,11 +442,87 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = DPXY7JLK67;
 				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.codecarton.swiftpkg;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A10000000000000000000071 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000072 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A10000000000000000000073 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DPXY7JLK67;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Swiftpkgr;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.codecarton.Swiftpkgr;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000074 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = DPXY7JLK67;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Swiftpkgr;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.codecarton.Swiftpkgr;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -315,17 +547,27 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A10000000000000000000051 /* Build configuration list for PBXNativeTarget "SwiftPkgCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000071 /* Debug */,
+				A10000000000000000000072 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000052 /* Build configuration list for PBXNativeTarget "Swiftpkgr" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000073 /* Debug */,
+				A10000000000000000000074 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/apple/swift-argument-parser";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.7.0;
-			};
-		};
 		9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/jpsim/Yams.git";
@@ -334,18 +576,26 @@
 				minimumVersion = 6.2.2;
 			};
 		};
+		9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-argument-parser";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.7.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		9F1E11A9300410D6000A60D7 /* ArgumentParser */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */;
-			productName = ArgumentParser;
-		};
 		9E13F8753004711C000A60D7 /* Yams */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9E13F8743004711C000A60D7 /* XCRemoteSwiftPackageReference "Yams" */;
 			productName = Yams;
+		};
+		9F1E11A9300410D6000A60D7 /* ArgumentParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9F1E11A8300410D6000A60D7 /* XCRemoteSwiftPackageReference "swift-argument-parser" */;
+			productName = ArgumentParser;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

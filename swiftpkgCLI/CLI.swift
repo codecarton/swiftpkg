@@ -1,48 +1,51 @@
 import ArgumentParser
 import Foundation
+import SwiftPkgCore
 
-struct CLIOptions: ParsableArguments {
+public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Create a new empty project with default settings.")
-    var create = false
+    public var create = false
 
     @Option(name: .customLong("import"), help: "Import an existing package.")
-    var importPackage: String?
+    public var importPackage: String?
 
     @Flag(name: .long, help: "Create build-info in JSON format.")
-    var json = false
+    public var json = false
 
     @Flag(name: .long, help: "Create build-info in YAML format.")
-    var yaml = false
+    public var yaml = false
 
     @Flag(name: .long, help: "Export the built package's Bom.txt.")
-    var exportBOMInfo = false
+    public var exportBOMInfo = false
 
     @Flag(name: .long, help: "Apply Bom.txt metadata without building.")
-    var sync = false
+    public var sync = false
 
     @Flag(name: .long, help: "Inhibit status messages on stdout.")
-    var quiet = false
+    public var quiet = false
 
     @Flag(name: [.customShort("f"), .long], help: "Convert an existing directory to a project.")
-    var force = false
+    public var force = false
 
     @Flag(name: .long, help: "Skip configured package signing.")
-    var skipSigning = false
+    public var skipSigning = false
 
     @Flag(name: .long, help: "Skip configured notarization.")
-    var skipNotarization = false
+    public var skipNotarization = false
 
     @Flag(name: .long, help: "Skip stapling after notarization.")
-    var skipStapling = false
+    public var skipStapling = false
 
     @Flag(name: .long, help: "Show program's version number and exit.")
-    var version = false
+    public var version = false
 
     @Argument(help: "The package project directory.")
-    var projectDirectory: String? = nil
+    public var projectDirectory: String?
+
+    public init() {}
 }
 
-enum CLIParseResult {
+public enum CLIParseResult {
     case options(CLIOptions)
     case help
     case version
@@ -50,17 +53,17 @@ enum CLIParseResult {
 }
 
 /// Represents the single operation requested by parsed command-line options.
-enum CLICommand {
+public enum CLICommand {
     case create(project: URL, format: BuildInfoFormat, force: Bool)
     case `import`(package: URL, project: URL, format: BuildInfoFormat)
     case synchronize(project: URL, requestedFormat: BuildInfoFormat?)
-    case build(project: URL, configuration: BuildConfiguration)
+    case build(project: URL, configuration: PackageBuildOptions)
 
     /// Resolves a parsed option set into one executable command.
-    static func resolve(from options: CLIOptions) throws -> CLICommand? {
+    public static func resolve(from options: CLIOptions) throws -> CLICommand? {
         guard let projectDirectory = options.projectDirectory else { return nil }
         let project = URL(fileURLWithPath: projectDirectory).standardizedFileURL
-        let requestedFormat = try BuildInfoFormat.requested(by: options)
+        let requestedFormat = try requestedFormat(from: options)
 
         if options.create {
             return .create(project: project, format: requestedFormat ?? .plist, force: options.force)
@@ -73,31 +76,31 @@ enum CLICommand {
             )
         }
         if options.sync { return .synchronize(project: project, requestedFormat: requestedFormat) }
-        return .build(project: project, configuration: BuildConfiguration(options: options, requestedFormat: requestedFormat))
+        return .build(
+            project: project,
+            configuration: PackageBuildOptions(
+                requestedFormat: requestedFormat,
+                exportsBOM: options.exportBOMInfo,
+                isQuiet: options.quiet,
+                skipsSigning: options.skipSigning,
+                skipsNotarization: options.skipNotarization,
+                skipsStapling: options.skipStapling
+            )
+        )
+    }
+
+    private static func requestedFormat(from options: CLIOptions) throws -> BuildInfoFormat? {
+        guard !(options.json && options.yaml) else {
+            throw MunkiPkgError.invalidConfiguration("Only a single build-info file can be built at a time!")
+        }
+        if options.json { return .json }
+        if options.yaml { return .yaml }
+        return nil
     }
 }
 
-/// Contains build-only command-line choices after parsing has completed.
-struct BuildConfiguration {
-    let requestedFormat: BuildInfoFormat?
-    let exportsBOM: Bool
-    let isQuiet: Bool
-    let skipsSigning: Bool
-    let skipsNotarization: Bool
-    let skipsStapling: Bool
-
-    init(options: CLIOptions, requestedFormat: BuildInfoFormat?) {
-        self.requestedFormat = requestedFormat
-        exportsBOM = options.exportBOMInfo
-        isQuiet = options.quiet
-        skipsSigning = options.skipSigning
-        skipsNotarization = options.skipNotarization
-        skipsStapling = options.skipStapling
-    }
-}
-
-enum CLIParser {
-    static let usage = """
+public enum CLIParser {
+    public static let usage = """
     Usage: swiftpkg [options] pkg_project_directory
            A tool for building a package from the contents of a
            pkg_project_directory.
@@ -118,7 +121,7 @@ enum CLIParser {
       --skip-stapling         Skip stapling after notarization.
     """
 
-    static func parse(_ arguments: [String]) -> CLIParseResult {
+    public static func parse(_ arguments: [String]) -> CLIParseResult {
         if arguments.last == "--import" {
             return .failure("--import option requires an argument")
         }

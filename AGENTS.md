@@ -4,8 +4,9 @@
 
 `swiftpkg` is a macOS 13+ command-line tool that creates, imports, and
 maintains Apple installer-package projects. It is a Swift implementation of
-Munki's `munki-pkg`. The SwiftPM package builds one executable target,
-`swiftpkg`; it is not a reusable library product.
+Munki's `munki-pkg`. `Swiftpkgr` is its macOS 15+ SwiftUI frontend. Both use
+the `SwiftPkgCore` static library; the app supplements rather than replaces
+the CLI.
 
 The primary development environment is macOS. The integration suite requires
 Apple tools such as `pkgbuild`, `productbuild`, `pkgutil`, `ditto`, and
@@ -13,7 +14,7 @@ Apple tools such as `pkgbuild`, `productbuild`, `pkgutil`, `ditto`, and
 
 ## Architecture
 
-- `swiftpkg/CLI.swift` parses command-line options and resolves them into one
+- `swiftpkgCLI/CLI.swift` parses command-line options and resolves them into one
   `CLICommand` (`create`, `import`, `synchronize`, or `build`). Preserve the
   documented option spelling and current exit behavior.
 - `swiftpkg/BuildInfo.swift` owns the configuration boundary. Use
@@ -28,6 +29,23 @@ Apple tools such as `pkgbuild`, `productbuild`, `pkgutil`, `ditto`, and
 - `swiftpkg/Support.swift` contains errors, console output, filesystem helpers,
   and `ProcessRunning`. Route subprocess calls through `ProcessRunning` so
   behavior is testable with `RecordingRunner`.
+- `swiftpkg/PackageSettingsDraft.swift` is the editable configuration boundary;
+  keep template loading distinct from build-time version substitution.
+- `Swiftpkgr/` contains the macOS 15 SwiftUI app. Keep `SwiftpkgrApp.swift` at
+  the app root and organize the remaining app files by role:
+  - `Screens/` contains user-facing navigation destinations and other base
+    views rendered as complete screens.
+  - `Components/` contains composable UI and command elements used by screens,
+    the app entry point, or other components.
+  - `Services/` contains API, panel, and other service-layer integrations.
+  - `Models/` contains app-specific value and domain types.
+  - `Extensions/` contains extensions of existing types. Name each file
+    `<TypeName>+Ext.swift` and keep extensions for different base types in
+    separate files.
+  - `State/` contains state retained for the app lifecycle. Observable types,
+    including types marked with `@Observable`, generally belong here.
+  Views use the observable `ProjectEditorModel` and call
+  `PackageOperationService` rather than invoking package tools directly.
 
 Prefer fluent, role-based Swift names and concise documentation comments for
 new nontrivial types and entry points. Keep side effects explicit in method
@@ -66,6 +84,7 @@ Run these from the repository root:
 swift test
 ./scripts/verify-loop.sh
 swift build -c release
+xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
 ```
 
 The unit tests use Swift Testing. Keep tests hermetic: use `TemporaryDirectory`
@@ -83,7 +102,7 @@ before handing off changes.
 ## CI, branches, and releases
 
 - Pull requests and pushes to `main` run `.github/workflows/ci.yml` on
-  `macos-15`: `swift test` and `./scripts/verify-loop.sh`.
+  `macos-15`: `swift test`, `./scripts/verify-loop.sh`, and a Swiftpkgr build.
 - Pushing a `v*` tag also validates that the tag exactly matches both `VERSION`
   and `swiftpkg/Version.swift`.
 - `.github/workflows/release.yml` runs on a version tag and invokes

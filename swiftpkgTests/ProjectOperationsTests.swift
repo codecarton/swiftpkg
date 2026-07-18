@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import swiftpkg
+@testable import SwiftPkgCore
 
 struct ProjectOperationsTests {
     @Test("creates a project template")

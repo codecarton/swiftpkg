@@ -20,6 +20,8 @@ jobs:
         run: swift test
       - name: Package integration verification
         run: ./scripts/verify-loop.sh
+      - name: Build Swiftpkgr app
+        run: xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release CODE_SIGNING_ALLOWED=NO build
       - name: Verify release tag version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |

@@ -1,29 +1,37 @@
 import Darwin
 import Foundation
 
-enum MunkiPkgError: Error, CustomStringConvertible {
+public enum MunkiPkgError: Error, CustomStringConvertible, LocalizedError {
     case message(String)
     case invalidConfiguration(String)
     case processFailed(tool: String, message: String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case let .message(value), let .invalidConfiguration(value): value
         case let .processFailed(tool, message): "\(tool): \(message)"
         }
     }
+
+    public var errorDescription: String? { description }
 }
 
-struct ProcessResult: Equatable {
-    let status: Int32
-    let stdout: Data
-    let stderr: Data
+public struct ProcessResult: Equatable, Sendable {
+    public let status: Int32
+    public let stdout: Data
+    public let stderr: Data
 
-    var stdoutString: String { String(decoding: stdout, as: UTF8.self) }
-    var stderrString: String { String(decoding: stderr, as: UTF8.self) }
+    public init(status: Int32, stdout: Data, stderr: Data) {
+        self.status = status
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
+    public var stdoutString: String { String(decoding: stdout, as: UTF8.self) }
+    public var stderrString: String { String(decoding: stderr, as: UTF8.self) }
 }
 
-protocol ProcessRunning {
+public protocol ProcessRunning: Sendable {
     /// Runs an executable with arguments and returns its captured result.
     func run(executable: String, arguments: [String]) throws -> ProcessResult
 
@@ -31,7 +39,11 @@ protocol ProcessRunning {
     func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws
 }
 
-extension ProcessRunning {
+public protocol ProcessControlling: Sendable {
+    func cancel()
+}
+
+public extension ProcessRunning {
     func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws {
         let result = try run(executable: executable, arguments: arguments)
         guard result.status == 0 else {
@@ -41,8 +53,13 @@ extension ProcessRunning {
     }
 }
 
-struct SystemProcessRunner: ProcessRunning {
-    func run(executable: String, arguments: [String]) throws -> ProcessResult {
+public final class SystemProcessRunner: ProcessRunning, ProcessControlling, @unchecked Sendable {
+    private let lock = NSLock()
+    private var activeProcess: Process?
+
+    public init() {}
+
+    public func run(executable: String, arguments: [String]) throws -> ProcessResult {
         let process = Process()
         let stdout = Pipe()
         let stderr = Pipe()
@@ -50,6 +67,12 @@ struct SystemProcessRunner: ProcessRunning {
         process.arguments = arguments
         process.standardOutput = stdout
         process.standardError = stderr
+        lock.withLock { activeProcess = process }
+        defer {
+            lock.withLock {
+                if activeProcess === process { activeProcess = nil }
+            }
+        }
         do {
             try process.run()
         } catch {
@@ -62,24 +85,46 @@ struct SystemProcessRunner: ProcessRunning {
             stderr: stderr.fileHandleForReading.readDataToEndOfFile()
         )
     }
+
+    public func cancel() {
+        let process = lock.withLock { activeProcess }
+        if process?.isRunning == true { process?.terminate() }
+    }
 }
 
-final class Console {
-    let quiet: Bool
+public final class Console: @unchecked Sendable {
+    public let quiet: Bool
     private let toolName: String
+    private let eventHandler: (@Sendable (ConsoleEvent) -> Void)?
 
-    init(quiet: Bool, toolName: String = "swiftpkg") {
+    public init(
+        quiet: Bool,
+        toolName: String = "swiftpkg",
+        eventHandler: (@Sendable (ConsoleEvent) -> Void)? = nil
+    ) {
         self.quiet = quiet
         self.toolName = toolName
+        self.eventHandler = eventHandler
     }
 
-    func display(_ message: String, toolName override: String? = nil) {
+    public func display(_ message: String, toolName override: String? = nil) {
         guard !quiet else { return }
-        print("\(override ?? toolName): \(message)")
+        if let eventHandler {
+            eventHandler(.status(message))
+        } else {
+            print("\(override ?? toolName): \(message)")
+        }
     }
 
-    func warning(_ message: String) { writeError("WARNING: \(message)") }
-    func error(_ message: String) { writeError("ERROR: \(message)") }
+    public func warning(_ message: String) {
+        if let eventHandler { eventHandler(.warning(message)) }
+        else { writeError("WARNING: \(message)") }
+    }
+
+    public func error(_ message: String) {
+        if let eventHandler { eventHandler(.error(message)) }
+        else { writeError("ERROR: \(message)") }
+    }
 
     private func writeError(_ message: String) {
         FileHandle.standardError.write(Data((message + "\n").utf8))
@@ -96,18 +141,18 @@ enum ToolPaths {
 }
 
 extension FileManager {
-    func itemExists(at url: URL) -> Bool { fileExists(atPath: url.path) }
+    public func itemExists(at url: URL) -> Bool { fileExists(atPath: url.path) }
 
-    func directoryExists(at url: URL) -> Bool {
+    public func directoryExists(at url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
-    func contents(at url: URL) throws -> [String] {
+    public func contents(at url: URL) throws -> [String] {
         try contentsOfDirectory(atPath: url.path)
     }
 
-    func removeIfPresent(at url: URL) throws {
+    public func removeIfPresent(at url: URL) throws {
         if fileExists(atPath: url.path) { try removeItem(at: url) }
     }
 }

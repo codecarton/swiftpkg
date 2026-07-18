@@ -2,74 +2,84 @@ import Foundation
 import Yams
 
 /// Identifies a supported on-disk build configuration format.
-enum BuildInfoFormat: String, CaseIterable {
+public enum BuildInfoFormat: String, CaseIterable, Identifiable, Sendable {
     case plist, json, yaml, yml
 
-    /// Returns the format explicitly requested by command-line options, if any.
-    static func requested(by options: CLIOptions) throws -> BuildInfoFormat? {
-        guard !(options.json && options.yaml) else {
-            throw MunkiPkgError.invalidConfiguration("Only a single build-info file can be built at a time!")
-        }
-        if options.json { return .json }
-        if options.yaml { return .yaml }
-        return nil
-    }
+    public var id: String { rawValue }
 }
 
 /// Controls the ownership mode passed to `pkgbuild`.
-enum PackageOwnership: String {
+public enum PackageOwnership: String, CaseIterable, Identifiable, Sendable {
     case recommended, preserve, preserveOther = "preserve-other"
+
+    public var id: String { rawValue }
 }
 
 /// Controls the compression mode passed to `pkgbuild`.
-enum PackageCompression: String {
+public enum PackageCompression: String, CaseIterable, Identifiable, Sendable {
     case legacy, latest
+
+    public var id: String { rawValue }
 }
 
 /// Controls the post-install action recorded in package metadata.
-enum PostInstallAction: String {
+public enum PostInstallAction: String, CaseIterable, Identifiable, Sendable {
     case none, logout, restart
+
+    public var id: String { rawValue }
 }
 
 /// Contains optional package-signing credentials.
-struct SigningConfiguration {
-    let identity: String
-    let keychain: String?
-    let additionalCertificateNames: [String]
-    let usesTimestamp: Bool?
+public struct SigningConfiguration: Sendable {
+    public let identity: String
+    public let keychain: String?
+    public let additionalCertificateNames: [String]
+    public let usesTimestamp: Bool?
+
+    public init(identity: String, keychain: String?, additionalCertificateNames: [String], usesTimestamp: Bool?) {
+        self.identity = identity
+        self.keychain = keychain
+        self.additionalCertificateNames = additionalCertificateNames
+        self.usesTimestamp = usesTimestamp
+    }
 }
 
 /// Contains credentials and timing options for Apple notarization.
-struct NotarizationConfiguration {
-    enum Authentication {
+public struct NotarizationConfiguration: Sendable {
+    public enum Authentication: Sendable {
         case appleID(appleID: String, teamID: String, password: String)
         case keychainProfile(String)
     }
 
-    let authentication: Authentication
-    let staplingTimeout: Int
+    public let authentication: Authentication
+    public let staplingTimeout: Int
+
+    public init(authentication: Authentication, staplingTimeout: Int) {
+        self.authentication = authentication
+        self.staplingTimeout = staplingTimeout
+    }
 }
 
 /// Provides the typed settings needed to build a package.
-struct PackageConfiguration {
-    let name: String
-    let identifier: String
-    let version: String
-    let ownership: PackageOwnership
-    let installLocation: String?
-    let compression: PackageCompression?
-    let minimumOSVersion: String?
-    let usesLargePayload: Bool
-    let postInstallAction: PostInstallAction
-    let preservesExtendedAttributes: Bool
-    let suppressesBundleRelocation: Bool
-    let usesDistributionStyle: Bool
-    let title: String?
-    let productIdentifier: String?
-    let signing: SigningConfiguration?
-    let notarization: NotarizationConfiguration?
+public struct PackageConfiguration: Sendable {
+    public let name: String
+    public let identifier: String
+    public let version: String
+    public let ownership: PackageOwnership
+    public let installLocation: String?
+    public let compression: PackageCompression?
+    public let minimumOSVersion: String?
+    public let usesLargePayload: Bool
+    public let postInstallAction: PostInstallAction
+    public let preservesExtendedAttributes: Bool
+    public let suppressesBundleRelocation: Bool
+    public let usesDistributionStyle: Bool
+    public let title: String?
+    public let productIdentifier: String?
+    public let signing: SigningConfiguration?
+    public let notarization: NotarizationConfiguration?
 
-    private init(
+    public init(
         name: String, identifier: String, version: String, ownership: PackageOwnership,
         installLocation: String?, compression: PackageCompression?, minimumOSVersion: String?, usesLargePayload: Bool,
         postInstallAction: PostInstallAction, preservesExtendedAttributes: Bool, suppressesBundleRelocation: Bool,
@@ -85,7 +95,7 @@ struct PackageConfiguration {
     }
 
     /// Creates default settings for a new project at the supplied location.
-    static func defaults(for project: URL) -> PackageConfiguration {
+    public static func defaults(for project: URL) -> PackageConfiguration {
         let baseName = project.lastPathComponent.replacingOccurrences(of: " ", with: "")
         return PackageConfiguration(
             name: "\(baseName)-${version}.pkg", identifier: "com.github.munki.pkg.\(baseName)", version: "1.0",
@@ -97,7 +107,7 @@ struct PackageConfiguration {
     }
 
     /// Decodes a configuration dictionary, applying defaults for missing keys.
-    init(values: [String: Any], defaults: PackageConfiguration) throws {
+    public init(values: [String: Any], defaults: PackageConfiguration) throws {
         name = try Self.stringValue(for: "name", in: values) ?? defaults.name
         identifier = try Self.stringValue(for: "identifier", in: values) ?? defaults.identifier
         version = try Self.stringValue(for: "version", in: values) ?? defaults.version
@@ -117,7 +127,7 @@ struct PackageConfiguration {
     }
 
     /// Returns a copy with `${version}` substituted in user-facing name fields.
-    func substitutingVersion() -> PackageConfiguration {
+    public func substitutingVersion() -> PackageConfiguration {
         func replacingVersion(in value: String?) -> String? {
             value?.replacingOccurrences(of: "${version}", with: version)
         }
@@ -132,7 +142,7 @@ struct PackageConfiguration {
     }
 
     /// Encodes this configuration using the stable, legacy on-disk keys.
-    var encodedValues: [String: Any] {
+    public var encodedValues: [String: Any] {
         var values: [String: Any] = [
             "name": name, "identifier": identifier, "version": version, "ownership": ownership.rawValue,
             "postinstall_action": postInstallAction.rawValue, "preserve_xattr": preservesExtendedAttributes,
@@ -184,12 +194,13 @@ struct PackageConfiguration {
         guard let value = values["notarization_info"] else { return nil }
         guard let notary = value as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("notarization_info must be a dictionary") }
         let authentication: NotarizationConfiguration.Authentication
-        if let appleID = notary["apple_id"] as? String, let teamID = notary["team_id"] as? String, let password = notary["password"] as? String {
+        if let appleID = notary["apple_id"] as? String, let teamID = notary["team_id"] as? String {
+            let password = notary["password"] as? String ?? ""
             authentication = .appleID(appleID: appleID, teamID: teamID, password: password)
         } else if let profile = notary["keychain_profile"] as? String {
             authentication = .keychainProfile(profile)
         } else {
-            throw MunkiPkgError.invalidConfiguration("notarization_info must specify apple_id + team_id + password or keychain_profile")
+            throw MunkiPkgError.invalidConfiguration("notarization_info must specify apple_id + team_id or keychain_profile")
         }
         let timeout = (notary["staple_timeout"] as? NSNumber)?.intValue ?? 300
         return NotarizationConfiguration(authentication: authentication, staplingTimeout: timeout)
@@ -211,7 +222,8 @@ private extension NotarizationConfiguration {
     var encodedValues: [String: Any] {
         var values: [String: Any] = ["staple_timeout": staplingTimeout]
         switch authentication {
-        case let .appleID(appleID, teamID, password): values.merge(["apple_id": appleID, "team_id": teamID, "password": password]) { _, new in new }
+        case let .appleID(appleID, teamID, password):
+            values.merge(["apple_id": appleID, "team_id": teamID, "password": password]) { _, new in new }
         case let .keychainProfile(profile): values["keychain_profile"] = profile
         }
         return values
@@ -219,10 +231,19 @@ private extension NotarizationConfiguration {
 }
 
 /// Loads and saves package configuration files in plist, JSON, or YAML form.
-enum BuildInfoStore {
-    static func load(from project: URL, requestedFormat: BuildInfoFormat?, fileManager: FileManager = .default) throws -> PackageConfiguration {
-        let format = try resolvedFormat(in: project, requestedFormat: requestedFormat, fileManager: fileManager)
-        let url = project.appendingPathComponent("build-info").appendingPathExtension(format.rawValue)
+public enum BuildInfoStore {
+    public static func load(from project: URL, requestedFormat: BuildInfoFormat?, fileManager: FileManager = .default) throws -> PackageConfiguration {
+        let document = try discover(in: project, requestedFormat: requestedFormat, fileManager: fileManager)
+        return try loadTemplate(from: document.url, defaultsFor: project).substitutingVersion()
+    }
+
+    public static func loadTemplate(from project: URL, requestedFormat: BuildInfoFormat? = nil, fileManager: FileManager = .default) throws -> PackageConfiguration {
+        let document = try discover(in: project, requestedFormat: requestedFormat, fileManager: fileManager)
+        return try loadTemplate(from: document.url, defaultsFor: project)
+    }
+
+    public static func loadTemplate(from url: URL, defaultsFor project: URL) throws -> PackageConfiguration {
+        let format = try format(for: url)
         let data = try Data(contentsOf: url)
         let object: Any
         do {
@@ -233,11 +254,15 @@ enum BuildInfoStore {
             }
         } catch { throw MunkiPkgError.invalidConfiguration("\(url.path) is not a valid \(format.rawValue) file: \(error.localizedDescription)") }
         guard let values = object as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("\(url.path) must contain a dictionary") }
-        return try PackageConfiguration(values: values, defaults: .defaults(for: project)).substitutingVersion()
+        return try PackageConfiguration(values: values, defaults: .defaults(for: project))
     }
 
-    static func write(_ configuration: PackageConfiguration, to project: URL, format: BuildInfoFormat) throws {
+    public static func write(_ configuration: PackageConfiguration, to project: URL, format: BuildInfoFormat) throws {
         let url = project.appendingPathComponent("build-info").appendingPathExtension(format.rawValue)
+        try write(configuration, toFile: url, format: format)
+    }
+
+    public static func write(_ configuration: PackageConfiguration, toFile url: URL, format: BuildInfoFormat) throws {
         let data: Data
         switch format {
         case .plist: data = try PropertyListSerialization.data(fromPropertyList: configuration.encodedValues, format: .xml, options: 0)
@@ -247,16 +272,23 @@ enum BuildInfoStore {
         try data.write(to: url, options: .atomic)
     }
 
-    private static func resolvedFormat(in project: URL, requestedFormat: BuildInfoFormat?, fileManager: FileManager) throws -> BuildInfoFormat {
+    public static func discover(in project: URL, requestedFormat: BuildInfoFormat? = nil, fileManager: FileManager = .default) throws -> BuildInfoDocument {
         if let requestedFormat {
             let url = project.appendingPathComponent("build-info").appendingPathExtension(requestedFormat.rawValue)
             guard fileManager.itemExists(at: url) else { throw MunkiPkgError.invalidConfiguration("No build-info file found!") }
-            return requestedFormat
+            return BuildInfoDocument(url: url, format: requestedFormat)
         }
         let baseURL = project.appendingPathComponent("build-info")
         let formats = BuildInfoFormat.allCases.filter { fileManager.itemExists(at: baseURL.appendingPathExtension($0.rawValue)) }
         guard formats.count <= 1 else { throw MunkiPkgError.invalidConfiguration("Multiple build-info files found!") }
         guard let format = formats.first else { throw MunkiPkgError.invalidConfiguration("No build-info file found!") }
+        return BuildInfoDocument(url: baseURL.appendingPathExtension(format.rawValue), format: format)
+    }
+
+    private static func format(for url: URL) throws -> BuildInfoFormat {
+        guard let format = BuildInfoFormat(rawValue: url.pathExtension.lowercased()) else {
+            throw MunkiPkgError.invalidConfiguration("Unsupported build-info format: \(url.pathExtension)")
+        }
         return format
     }
 }

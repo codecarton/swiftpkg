@@ -5,40 +5,58 @@
 [![CI](https://github.com/codecarton/swiftpkg/actions/workflows/ci.yml/badge.svg)](https://github.com/codecarton/swiftpkg/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/codecarton/swiftpkg?display_name=release&sort=semver)](https://github.com/codecarton/swiftpkg/releases)
 [![License](https://img.shields.io/github/license/codecarton/swiftpkg)](LICENSE)
-[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
+[![CLI macOS 13+](https://img.shields.io/badge/CLI-macOS%2013%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
+[![Swiftpkgr macOS 15+](https://img.shields.io/badge/Swiftpkgr-macOS%2015%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
 
-`swiftpkg` is a native toolkit for building Apple installer packages from
-version-control-friendly project directories. Use the command-line tool for
-automation today; Swiftpkgr, its macOS desktop companion, brings a visual
-workflow in the 0.3.0 release. Both are powered by the same Swift
-implementation of [`munki-pkg`](https://github.com/munki/munki-pkg).
+`swiftpkg` is a macOS command-line tool for building Apple installer packages
+from version-control-friendly project directories. It is a Swift implementation
+of [`munki-pkg`](https://github.com/munki/munki-pkg). `Swiftpkgr` is its native
+macOS desktop app. Both frontends use the same `SwiftPkgCore` package engine and
+open the same portable projects.
 
-## Install for Mac administrators
+## Install swiftpkg and Swiftpkgr
 
 Download `swiftpkg-<version>-universal.pkg` and `SHA256SUMS` from the matching
-GitHub Release. The installer is Universal 2 (Apple silicon and Intel),
-currently unsigned; it supports macOS 13 and later. This is temporary while
-Apple signing and notarization are being set up. Verify the published checksum
-before deployment and expect macOS to require an administrator override.
+GitHub Release. Starting with 0.3.0, the signed and notarized Universal 2
+installer includes both the CLI and Swiftpkgr. The combined installer requires
+macOS 15 or later; the CLI itself continues to support macOS 13 and later.
 
 Verify the download before installation:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
+pkgutil --check-signature swiftpkg-<version>-universal.pkg
+xcrun stapler validate swiftpkg-<version>-universal.pkg
 sudo installer -pkg swiftpkg-<version>-universal.pkg -target /
 swiftpkg --version
 ```
 
-The installer places the executable at `/usr/local/bin/swiftpkg`. Deploy that
-same installer through Munki, Jamf Pro, or another management system; do not
-repackage the executable. Upgrades replace that path. To uninstall, remove
-`/usr/local/bin/swiftpkg` and, if desired, the `org.swiftpkg.cli` installer
-receipt after confirming it is not needed for inventory.
+The installer places the executable at `/usr/local/bin/swiftpkg` and the app at
+`/Applications/Swiftpkgr.app`. Deploy that same installer through Munki, Jamf
+Pro, or another management system; do not repackage its contents. Subsequent
+releases replace the CLI and atomically upgrade the app bundle.
+
+To uninstall, remove `/usr/local/bin/swiftpkg` and
+`/Applications/Swiftpkgr.app`, then optionally forget the
+`com.codecarton.swiftpkg.installer` receipt after confirming it is not needed
+for inventory.
 
 `swiftpkg` requires macOS, Xcode Command Line Tools, and Apple's `pkgbuild`,
 `productbuild`, `pkgutil`, `ditto`, and `lsbom` tools. Package signing and
 notarization additionally require the appropriate Apple credentials on the
 build host.
+
+## Swiftpkgr desktop app
+
+Swiftpkgr provides a focused visual workspace for creating, importing, editing,
+building, signing, and notarizing package projects. Open the same
+`build-info.plist`, `.json`, `.yaml`, or `.yml` projects in either Swiftpkgr or
+the CLI without conversion.
+
+Swiftpkgr can create a new project, convert an existing folder, import a flat or
+supported bundle-style installer package, synchronize metadata from `Bom.txt`,
+and build the final package. Build progress and output stay visible in the app,
+and Finder selects the generated package when the build completes.
 
 ## Use
 
@@ -72,23 +90,6 @@ Useful options:
 --version              Show the tool version
 ```
 
-## Swiftpkgr desktop app — coming in 0.3.0
-
-Coming in the swiftpkg 0.3.0 release, Swiftpkgr is the native macOS 15+
-desktop companion to the macOS 13+ `swiftpkg` command-line tool. It opens the
-same project directories and uses the same configuration, import, build, and
-BOM implementation, so projects can move between visual and automated
-workflows without conversion.
-
-Swiftpkgr will let you create, open, or convert package projects; import
-existing installer packages; edit package, distribution, signing, and
-notarization values; and build packages while viewing operation progress. It
-will import and export CLI-compatible plist, JSON, or YAML settings without
-losing `${version}` placeholders.
-
-Swiftpkgr will be included in the same installer package as the CLI beginning
-with 0.3.0.
-
 ## Project layout
 
 ```text
@@ -118,39 +119,52 @@ swift test
 ```
 
 The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
-provides YAML support. The CLI target also builds with:
+provides YAML support. Both products also build through Xcode:
 
 ```sh
-xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
+xcodebuild -project swiftpkg.xcodeproj -scheme Swiftpkgr -configuration Release build
 ```
 
 ## Maintainer releases
 
-`VERSION` and `swiftpkg/Version.swift` are the release-version source of truth
-and must match before a `v<version>` tag is created. On a clean, trusted macOS
-release machine with the certificates and notary profile installed:
+`VERSION`, `swiftpkg/Version.swift`, and the Swiftpkgr Xcode marketing version
+must match before a release. On a trusted Mac, export the public Developer ID
+identity names and notarytool keychain-profile label:
 
 ```sh
-APP_SIGN_IDENTITY='Developer ID Application: Example (TEAMID)' \
-INSTALLER_SIGN_IDENTITY='Developer ID Installer: Example (TEAMID)' \
-NOTARY_PROFILE='swiftpkg-notary' \
-./scripts/release.sh
+export APP_SIGN_IDENTITY='Developer ID Application: Example (TEAMID)'
+export INSTALLER_SIGN_IDENTITY='Developer ID Installer: Example (TEAMID)'
+export NOTARY_PROFILE='swiftpkg-notary'
 ```
 
-The script runs tests, builds a Universal 2 executable, signs it, creates,
-notarizes, staples, and validates the installer, then writes artifacts and
-`SHA256SUMS` to `dist/`. To publish a GitHub Release after creating and pushing
-the matching tag, add `GH_PUBLISH=1 GITHUB_REPOSITORY=owner/repo`; this requires
-the GitHub CLI to be authenticated on the release Mac.
+Validate the release environment without changing anything:
 
-Until Apple credentials are available, pushing a matching `v<version>` tag runs
-the GitHub **Release** workflow. It builds an unsigned installer and publishes
-it with `SHA256SUMS` to that GitHub Release. The same temporary behavior can be
-run locally with `UNSIGNED=1 ./scripts/release.sh`. Unsigned packages must not
-be treated as notarized or Gatekeeper-validated.
+```sh
+./scripts/publish-xcode-release.sh --check
+```
 
-GitHub Actions validates pull requests and tags and publishes unsigned tagged
-releases; it intentionally has no Apple signing credentials. See [VERIFICATION.md](VERIFICATION.md),
+Build, sign, notarize, staple, and validate the combined installer locally:
+
+```sh
+./scripts/publish-xcode-release.sh --build
+```
+
+After the release commit is merged to a clean `main` checkout, publish it:
+
+```sh
+./scripts/publish-xcode-release.sh --publish
+```
+
+The publish workflow runs the test and integration suites, exports Universal 2
+CLI and app products from Xcode, signs and notarizes them, builds the installer
+with the `swiftpkg` in `PATH`, writes the package and `SHA256SUMS` to `dist/`,
+pushes `main` and the explicit `v<version>` tag, and creates or updates the
+GitHub Release.
+
+The tag workflow retains an unsigned CI fallback for environments without Apple
+credentials, but it publishes only when no signed release exists and never
+overwrites signed assets. See [VERIFICATION.md](VERIFICATION.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for project
 processes.
 

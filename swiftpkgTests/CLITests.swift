@@ -1,4 +1,5 @@
 import Testing
+@testable import SwiftPkgCore
 @testable import swiftpkg
 
 struct CLITests {
