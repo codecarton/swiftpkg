@@ -78,11 +78,36 @@ public final class SystemProcessRunner: ProcessRunning, ProcessControlling, @unc
         } catch {
             throw MunkiPkgError.message("\(URL(fileURLWithPath: executable).lastPathComponent) execution failed: \(error.localizedDescription)")
         }
+
+        // Drain stdout and stderr concurrently on background queues *before*
+        // waiting. Reading only after waitUntilExit() (or draining the pipes
+        // sequentially) deadlocks: a child that writes more than the ~64KB pipe
+        // buffer to either stream blocks on write(), never exits, and the wait
+        // hangs forever. Each field is written exactly once by its own closure;
+        // the parent reads the box only after group.wait(), so there is no
+        // concurrent mutation.
+        final class DataBox: @unchecked Sendable {
+            var stdout = Data()
+            var stderr = Data()
+        }
+        let box = DataBox()
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.stdout = stdout.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.stderr = stderr.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
         process.waitUntilExit()
+        group.wait()
         return ProcessResult(
             status: process.terminationStatus,
-            stdout: stdout.fileHandleForReading.readDataToEndOfFile(),
-            stderr: stderr.fileHandleForReading.readDataToEndOfFile()
+            stdout: box.stdout,
+            stderr: box.stderr
         )
     }
 
