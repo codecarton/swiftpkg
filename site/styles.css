@@ -387,6 +387,126 @@ footer a:hover { color: var(--orange-dark); }
   line-height: 1.65;
 }
 
+.install {
+  padding-top: 120px;
+  padding-bottom: 120px;
+}
+
+.install-grid {
+  margin-top: 62px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.install-card {
+  min-width: 0;
+  padding: 32px 34px 31px 0;
+}
+
+.install-card + .install-card {
+  padding-left: 34px;
+  border-left: 1px solid var(--line);
+}
+
+.install-label {
+  margin: 0 0 16px;
+  color: var(--orange-dark);
+  font: 700 .64rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.install-card h3 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: -.045em;
+}
+
+.install-card > p:not(.install-label) {
+  max-width: 430px;
+  min-height: 48px;
+  color: var(--muted);
+  font-size: .85rem;
+  line-height: 1.55;
+}
+
+.install-card code {
+  margin: 23px 0 18px;
+  padding: 14px 15px;
+  display: block;
+  overflow-x: auto;
+  background: var(--panel);
+  color: #f5f2e9;
+  border-left: 3px solid var(--orange);
+  font: 500 .72rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}
+
+.install-card code span { color: #a9a79f; }
+
+.install-card > a {
+  color: #55524b;
+  font-size: .75rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-color: #b8b3a7;
+  text-underline-offset: 4px;
+}
+
+.install-card > a:hover { color: var(--orange-dark); }
+
+.release-resources {
+  padding-top: 27px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 35px;
+}
+
+.release-resources > div {
+  max-width: 360px;
+  flex: 0 0 auto;
+}
+
+.release-resources > div b,
+.release-resources > div span {
+  display: block;
+}
+
+.release-resources b {
+  font-size: .85rem;
+  letter-spacing: -.015em;
+}
+
+.release-resources > div span {
+  margin-top: 5px;
+  color: #77746c;
+  font-size: .71rem;
+  line-height: 1.5;
+}
+
+.release-resources nav {
+  max-width: 650px;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 19px;
+  color: #55524b;
+  font-size: .72rem;
+}
+
+.release-resources nav a {
+  text-decoration: underline;
+  text-decoration-color: #b8b3a7;
+  text-underline-offset: 4px;
+}
+
+.release-resources nav a:hover { color: var(--orange-dark); }
+
+.workflow { border-top: 1px solid var(--line); }
+
 .steps {
   margin: 0;
   padding: 66px 0 0;
@@ -811,6 +931,14 @@ footer div { display: flex; gap: 18px; }
   .proof div { gap: 9px; }
   .proof div + div { padding-left: 13px; }
   .section { padding: 100px 20px; }
+  .install-grid { grid-template-columns: 1fr; }
+  .install-card,
+  .install-card + .install-card { padding: 27px 0; border-left: 0; }
+  .install-card + .install-card { border-top: 1px solid var(--line); }
+  .install-card > p:not(.install-label) { min-height: 0; }
+  .release-resources { flex-direction: column; gap: 20px; }
+  .release-resources > div { max-width: 490px; }
+  .release-resources nav { justify-content: flex-start; }
   .steps { grid-template-columns: 1fr; padding-top: 38px; }
   .steps li,
   .steps li + li { min-height: auto; padding: 25px 0; border-left: 0; }
@@ -836,6 +964,7 @@ footer div { display: flex; gap: 18px; }
   .glow-panel { box-shadow: 7px 7px 0 #d9d5ca; }
   .proof strong { font-size: 1.7rem; }
   .proof span { font-size: .55rem; letter-spacing: .07em; }
+  .install-card code { font-size: .64rem; }
   .app-content { grid-template-columns: 108px 1fr; }
   .app-editor { padding: 24px 14px; }
   .build-row button { padding: 8px; }
