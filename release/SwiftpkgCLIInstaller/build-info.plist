@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>name</key>
-	<string>swiftpkg-${version}-combined.pkg</string>
+	<string>swiftpkg-${version}-cli.pkg</string>
 	<key>identifier</key>
-	<string>com.codecarton.swiftpkg.installer</string>
+	<string>com.codecarton.swiftpkg.cli.installer</string>
 	<key>version</key>
 	<string>0.3.1</string>
 	<key>ownership</key>
@@ -15,19 +15,17 @@
 	<key>compression</key>
 	<string>latest</string>
 	<key>min-os-version</key>
-	<string>15.0</string>
+	<string>13.0</string>
 	<key>postinstall_action</key>
 	<string>none</string>
 	<key>preserve_xattr</key>
 	<true/>
-	<key>suppress_bundle_relocation</key>
-	<true/>
 	<key>distribution_style</key>
 	<true/>
 	<key>title</key>
-	<string>Swiftpkg ${version}</string>
+	<string>swiftpkg CLI ${version}</string>
 	<key>product id</key>
-	<string>com.codecarton.swiftpkg</string>
+	<string>com.codecarton.swiftpkg.cli</string>
 	<key>signing_info</key>
 	<dict>
 		<key>identity</key>

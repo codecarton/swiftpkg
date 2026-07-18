@@ -5,32 +5,15 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish-unsigned-package-fallback:
+  validate-unsigned-package-fallback:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
-      - name: Build unsigned installer
+      - name: Validate unsigned installer build
         env:
           UNSIGNED: '1'
           GH_PUBLISH: '0'
         run: ./scripts/release.sh
-      - name: Publish only when no signed release exists
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release already exists; preserving its signed assets."
-            exit 0
-          fi
-          if gh release create "$GITHUB_REF_NAME" dist/*.pkg dist/SHA256SUMS \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "swiftpkg ${GITHUB_REF_NAME#v}" \
-              --verify-tag \
-              --generate-notes; then
-            exit 0
-          fi
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1

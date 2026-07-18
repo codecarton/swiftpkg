@@ -16,30 +16,36 @@ open the same portable projects.
 
 ## Install swiftpkg and Swiftpkgr
 
-Download `swiftpkg-<version>-universal.pkg` and `SHA256SUMS` from the matching
-GitHub Release. Starting with 0.3.0, the signed and notarized Universal 2
-installer includes both the CLI and Swiftpkgr. The combined installer requires
-macOS 15 or later; the CLI itself continues to support macOS 13 and later.
+Download `SHA256SUMS` and the appropriate signed, notarized artifact from the
+matching GitHub Release:
 
-Verify the download before installation:
+- `swiftpkg-<version>-combined.pkg` installs both the CLI and Swiftpkgr and
+  requires macOS 15 or later.
+- `swiftpkg-<version>-cli.pkg` installs only the CLI and requires macOS 13 or
+  later.
+- `Swiftpkgr-<version>.zip` contains only the macOS 15+ app.
+
+Verify a package download before installation:
 
 ```sh
-shasum -a 256 -c SHA256SUMS
-pkgutil --check-signature swiftpkg-<version>-universal.pkg
-xcrun stapler validate swiftpkg-<version>-universal.pkg
-sudo installer -pkg swiftpkg-<version>-universal.pkg -target /
+grep ' swiftpkg-<version>-combined.pkg$' SHA256SUMS | shasum -a 256 -c -
+pkgutil --check-signature swiftpkg-<version>-combined.pkg
+xcrun stapler validate swiftpkg-<version>-combined.pkg
+sudo installer -pkg swiftpkg-<version>-combined.pkg -target /
 swiftpkg --version
 ```
 
-The installer places the executable at `/usr/local/bin/swiftpkg` and the app at
-`/Applications/Swiftpkgr.app`. Deploy that same installer through Munki, Jamf
-Pro, or another management system; do not repackage its contents. Subsequent
-releases replace the CLI and atomically upgrade the app bundle.
+The combined installer places the executable at `/usr/local/bin/swiftpkg` and
+the app at `/Applications/Swiftpkgr.app`. Deploy that artifact through Munki,
+Jamf Pro, or another management system; do not repackage its contents. Use the
+CLI package when managed Macs do not need the app. The ZIP can be expanded and
+`Swiftpkgr.app` moved to `/Applications` for an app-only installation.
 
 To uninstall, remove `/usr/local/bin/swiftpkg` and
 `/Applications/Swiftpkgr.app`, then optionally forget the
-`com.codecarton.swiftpkg.installer` receipt after confirming it is not needed
-for inventory.
+`com.codecarton.swiftpkg.installer` or
+`com.codecarton.swiftpkg.cli.installer` receipt after confirming it is not
+needed for inventory.
 
 `swiftpkg` requires macOS, Xcode Command Line Tools, and Apple's `pkgbuild`,
 `productbuild`, `pkgutil`, `ditto`, and `lsbom` tools. Package signing and
@@ -145,7 +151,7 @@ Validate the release environment without changing anything:
 ./scripts/publish-xcode-release.sh --check
 ```
 
-Build, sign, notarize, staple, and validate the combined installer locally:
+Build, sign, notarize, staple, and validate all release artifacts locally:
 
 ```sh
 ./scripts/publish-xcode-release.sh --build
@@ -158,17 +164,18 @@ After the release commit is merged to a clean `main` checkout, publish it:
 ```
 
 The publish workflow runs the test and integration suites, exports Universal 2
-CLI and app products from Xcode, signs and notarizes them, builds the installer
-with the `swiftpkg` in `PATH`, writes the package, a Homebrew-ready Universal 2
-CLI tarball, and `SHA256SUMS` to `dist/`, pushes `main` and the explicit
-`v<version>` tag, and creates or updates the GitHub Release. Once those signed
-assets are published, it dispatches the immutable tarball URL and checksum to
-`codecarton/homebrew-tap`, where automation opens a tested formula-update pull
-request. The dispatch token should be limited to that tap repository.
+CLI and app products from Xcode, signs and notarizes them, and builds the
+combined and CLI-only installers with the `swiftpkg` in `PATH`. It writes both
+packages, the stapled app ZIP, the Homebrew CLI tarball, and `SHA256SUMS` to
+`dist/`, pushes `main` and the explicit `v<version>` tag, and creates or updates
+the GitHub Release. Once those signed assets are published, it dispatches the
+immutable CLI and app URLs and checksums to `codecarton/homebrew-tap`, where
+automation opens one tested formula-and-cask update pull request. The dispatch
+token should be limited to that tap repository.
 
-The tag workflow retains an unsigned CI fallback for environments without Apple
-credentials, but it publishes only when no signed release exists and never
-overwrites signed assets. See [VERIFICATION.md](VERIFICATION.md),
+The tag workflow retains an unsigned CI build as a validation fallback, but
+never publishes its artifacts. Only the trusted signing workflow creates the
+immutable GitHub Release. See [VERIFICATION.md](VERIFICATION.md),
 [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for project
 processes.
 
