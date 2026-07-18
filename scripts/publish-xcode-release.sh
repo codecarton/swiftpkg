@@ -29,6 +29,7 @@ INSTALLER_SIGN_IDENTITY=${INSTALLER_SIGN_IDENTITY:?Set INSTALLER_SIGN_IDENTITY t
 NOTARY_PROFILE=${NOTARY_PROFILE:?Set NOTARY_PROFILE to a notarytool keychain profile.}
 GIT_REMOTE=${GIT_REMOTE:-origin}
 RELEASE_BRANCH=${RELEASE_BRANCH:-main}
+HOMEBREW_TAP_REPOSITORY=${HOMEBREW_TAP_REPOSITORY:-codecarton/homebrew-tap}
 
 fail() {
     echo "release error: $*" >&2
@@ -39,7 +40,7 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "required command not found in PATH: $1"
 }
 
-for command in swiftpkg xcodebuild codesign lipo ditto git xcrun security plutil shasum; do
+for command in swiftpkg xcodebuild codesign lipo ditto git xcrun security plutil shasum tar awk; do
     require_command "$command"
 done
 
@@ -67,6 +68,9 @@ if [ "$MODE" != "--build" ]; then
     require_command gh
     gh auth status >/dev/null ||
         fail "GitHub CLI is not authenticated"
+fi
+if [ "$MODE" = "--publish" ]; then
+    HOMEBREW_TAP_DISPATCH_TOKEN=${HOMEBREW_TAP_DISPATCH_TOKEN:?Set HOMEBREW_TAP_DISPATCH_TOKEN to a token that can dispatch to the Homebrew tap.}
 fi
 
 [ "$MODE" != "--check" ] || {
@@ -181,6 +185,7 @@ install -m 755 "$CLI_PRODUCT" "$INSTALLER_PROJECT/payload/usr/local/bin/swiftpkg
 "$SWIFTPKG_BIN" "$INSTALLER_PROJECT"
 
 PACKAGE_NAME="swiftpkg-$VERSION-universal.pkg"
+TARBALL_NAME="swiftpkg-$VERSION-universal.tar.gz"
 BUILT_PACKAGE="$INSTALLER_PROJECT/build/$PACKAGE_NAME"
 [ -f "$BUILT_PACKAGE" ] || fail "Swiftpkg did not create $PACKAGE_NAME"
 
@@ -189,11 +194,12 @@ xcrun stapler validate "$BUILT_PACKAGE"
 spctl --assess --type install --verbose=4 "$BUILT_PACKAGE"
 
 mkdir -p "$DIST"
-rm -f "$DIST/$PACKAGE_NAME" "$DIST/SHA256SUMS"
+rm -f "$DIST/$PACKAGE_NAME" "$DIST/$TARBALL_NAME" "$DIST/SHA256SUMS"
 ditto "$BUILT_PACKAGE" "$DIST/$PACKAGE_NAME"
+tar -C "$CLI_PRODUCTS" -czf "$DIST/$TARBALL_NAME" swiftpkg
 (
     cd "$DIST"
-    shasum -a 256 "$PACKAGE_NAME" > SHA256SUMS
+    shasum -a 256 "$PACKAGE_NAME" "$TARBALL_NAME" > SHA256SUMS
 )
 
 [ "$MODE" != "--build" ] || {
@@ -210,16 +216,28 @@ git -C "$ROOT" push "$GIT_REMOTE" "refs/tags/$TAG"
 
 GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}
 if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-    gh release upload "$TAG" "$DIST/$PACKAGE_NAME" "$DIST/SHA256SUMS" \
+    gh release upload "$TAG" "$DIST/$PACKAGE_NAME" "$DIST/$TARBALL_NAME" "$DIST/SHA256SUMS" \
         --clobber \
         --repo "$GITHUB_REPOSITORY"
 else
-    gh release create "$TAG" "$DIST/$PACKAGE_NAME" "$DIST/SHA256SUMS" \
+    gh release create "$TAG" "$DIST/$PACKAGE_NAME" "$DIST/$TARBALL_NAME" "$DIST/SHA256SUMS" \
         --repo "$GITHUB_REPOSITORY" \
         --title "swiftpkg $VERSION" \
         --verify-tag \
         --generate-notes
 fi
 
+TARBALL_SHA256=$(awk -v name="$TARBALL_NAME" '$2 == name { print $1 }' "$DIST/SHA256SUMS")
+[ -n "$TARBALL_SHA256" ] || fail "could not read the Homebrew tarball checksum"
+TARBALL_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$TARBALL_NAME"
+GH_TOKEN="$HOMEBREW_TAP_DISPATCH_TOKEN" gh api \
+    --method POST \
+    "repos/$HOMEBREW_TAP_REPOSITORY/dispatches" \
+    -f event_type=swiftpkg-release \
+    -f "client_payload[version]=$VERSION" \
+    -f "client_payload[url]=$TARBALL_URL" \
+    -f "client_payload[sha256]=$TARBALL_SHA256"
+
 echo "Published $TAG to $GITHUB_REPOSITORY"
+echo "Requested a Homebrew formula update in $HOMEBREW_TAP_REPOSITORY"
 echo "Release artifacts: $DIST"

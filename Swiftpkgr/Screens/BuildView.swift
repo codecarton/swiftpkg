@@ -24,7 +24,11 @@ struct BuildView: View {
             }
             Section("Activity") {
                 if model.isRunning {
-                    ProgressView(model.statusMessage)
+                    HStack {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text(model.statusMessage)
+                    }
                 } else {
                     LabeledContent("Status", value: model.statusMessage)
                 }

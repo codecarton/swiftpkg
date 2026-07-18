@@ -136,6 +136,7 @@ identity names and notarytool keychain-profile label:
 export APP_SIGN_IDENTITY='Developer ID Application: Example (TEAMID)'
 export INSTALLER_SIGN_IDENTITY='Developer ID Installer: Example (TEAMID)'
 export NOTARY_PROFILE='swiftpkg-notary'
+export HOMEBREW_TAP_DISPATCH_TOKEN='tap-repository-token'
 ```
 
 Validate the release environment without changing anything:
@@ -158,9 +159,12 @@ After the release commit is merged to a clean `main` checkout, publish it:
 
 The publish workflow runs the test and integration suites, exports Universal 2
 CLI and app products from Xcode, signs and notarizes them, builds the installer
-with the `swiftpkg` in `PATH`, writes the package and `SHA256SUMS` to `dist/`,
-pushes `main` and the explicit `v<version>` tag, and creates or updates the
-GitHub Release.
+with the `swiftpkg` in `PATH`, writes the package, a Homebrew-ready Universal 2
+CLI tarball, and `SHA256SUMS` to `dist/`, pushes `main` and the explicit
+`v<version>` tag, and creates or updates the GitHub Release. Once those signed
+assets are published, it dispatches the immutable tarball URL and checksum to
+`codecarton/homebrew-tap`, where automation opens a tested formula-update pull
+request. The dispatch token should be limited to that tap repository.
 
 The tag workflow retains an unsigned CI fallback for environments without Apple
 credentials, but it publishes only when no signed release exists and never
