@@ -193,7 +193,7 @@ private struct DistributionPackageBuilder {
 }
 
 /// Uploads a package to Apple notarization and optionally staples it.
-private struct NotarizationService: Sendable {
+struct NotarizationService: Sendable {
     let runner: any ProcessRunning
     let console: Console
 
@@ -222,8 +222,7 @@ private struct NotarizationService: Sendable {
             if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.message("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        console.warning("Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.")
-        return false
+        throw MunkiPkgError.message("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
     }
 
     private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
