@@ -20,6 +20,7 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         }
         let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
         try layout.createBuildDirectoryIfNeeded()
+        let output = layout.buildDirectory.appendingPathComponent(packageConfiguration.name)
         try await layout.withTemporaryDirectory { temporaryDirectory in
             let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
             let scriptPreparer = ScriptPreparer(fileManager: fileManager, console: console)
@@ -34,9 +35,16 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
                 try DistributionPackageBuilder(fileManager: fileManager, runner: runner, console: console)
                     .buildDistribution(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
             }
-            guard let notarization = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
-            try await NotarizationService(runner: runner, console: console)
-                .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
+            if let notarization = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning {
+                try await NotarizationService(runner: runner, console: console)
+                    .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
+            }
+        }
+        if configuration.verifies {
+            let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
+            let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
+            try PackageVerifier(runner: runner, console: console)
+                .verify(package: output, signed: signed, notarized: notarized)
         }
     }
 

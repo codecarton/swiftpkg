@@ -36,6 +36,9 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Skip stapling after notarization.")
     public var skipStapling = false
 
+    @Flag(name: .long, help: "After building, verify the package matches build-info: signature present when signing was requested (pkgutil), Gatekeeper-accepted when notarized (spctl). Fails the build on mismatch.")
+    public var verify = false
+
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
 
@@ -84,7 +87,8 @@ public enum CLICommand {
                 isQuiet: options.quiet,
                 skipsSigning: options.skipSigning,
                 skipsNotarization: options.skipNotarization,
-                skipsStapling: options.skipStapling
+                skipsStapling: options.skipStapling,
+                verifies: options.verify
             )
         )
     }
@@ -119,6 +123,7 @@ public enum CLIParser {
       --skip-signing          Skip configured package signing.
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
+      --verify                Verify the built package matches build-info.
     """
 
     public static func parse(_ arguments: [String]) -> CLIParseResult {

@@ -6,6 +6,10 @@ public struct PackageBuildOptions: Sendable {
     public let skipsSigning: Bool
     public let skipsNotarization: Bool
     public let skipsStapling: Bool
+    /// After building, assert the package matches what build-info declared
+    /// (signature present when signing was requested, Gatekeeper-accepted when
+    /// notarized). Fails the build on mismatch.
+    public let verifies: Bool
 
     public init(
         requestedFormat: BuildInfoFormat? = nil,
@@ -13,7 +17,8 @@ public struct PackageBuildOptions: Sendable {
         isQuiet: Bool = false,
         skipsSigning: Bool = false,
         skipsNotarization: Bool = false,
-        skipsStapling: Bool = false
+        skipsStapling: Bool = false,
+        verifies: Bool = false
     ) {
         self.requestedFormat = requestedFormat
         self.exportsBOM = exportsBOM
@@ -21,5 +26,6 @@ public struct PackageBuildOptions: Sendable {
         self.skipsSigning = skipsSigning
         self.skipsNotarization = skipsNotarization
         self.skipsStapling = skipsStapling
+        self.verifies = verifies
     }
 }

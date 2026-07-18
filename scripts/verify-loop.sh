@@ -71,6 +71,13 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+VERIFY="$WORK/Verify"
+run "$BIN" --create "$VERIFY"
+mkdir -p "$VERIFY/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$VERIFY/payload/usr/local/bin/tool"
+run "$BIN" --verify "$VERIFY"
+test -f "$VERIFY/build/Verify-1.0.pkg"
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"
