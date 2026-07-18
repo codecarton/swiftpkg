@@ -21,9 +21,10 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
         try layout.createBuildDirectoryIfNeeded()
         try await layout.withTemporaryDirectory { temporaryDirectory in
-            let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
+            let scriptsOverride = try applyBuildVariables(to: layout.scripts, project: project, temporaryDirectory: temporaryDirectory, configuration: configuration)
+            let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory, scriptsOverride: scriptsOverride)
             let scriptPreparer = ScriptPreparer(fileManager: fileManager, console: console)
-            if let scripts = layout.scripts { try scriptPreparer.prepareScripts(in: scripts) }
+            if scriptsOverride == nil, let scripts = layout.scripts { try scriptPreparer.prepareScripts(in: scripts) }
             try ComponentPackageBuilder(fileManager: fileManager, runner: runner, console: console)
                 .buildComponent(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
             if configuration.exportsBOM {
@@ -38,6 +39,54 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
             try await NotarizationService(runner: runner, console: console)
                 .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
         }
+    }
+
+    /// Loads `.env` + inherited variables and, if any apply, writes substituted
+    /// script copies to a private temp dir, returning that directory for the
+    /// build to use in place of the originals.
+    private func applyBuildVariables(to scripts: URL?, project: URL, temporaryDirectory: URL, configuration: PackageBuildOptions) throws -> URL? {
+        guard let scripts else { return nil }
+
+        let envPath: String
+        if let explicit = configuration.envFile {
+            guard fileManager.fileExists(atPath: explicit) else {
+                throw MunkiPkgError.invalidConfiguration("--env-file not found: \(explicit)")
+            }
+            envPath = explicit
+        } else {
+            envPath = project.appendingPathComponent(".env").path
+        }
+
+        let fileVariables = try EnvLoader.load(from: envPath, console: console)
+        let variables = EnvLoader.merge(fileVariables: fileVariables, inheritsEnvironment: configuration.inheritsEnvironment)
+
+        guard !variables.isEmpty else {
+            if configuration.strictEnvironment {
+                try failOnUnresolved(ScriptEnvironment.unresolvedPlaceholders(in: scripts, given: [:], fileManager: fileManager))
+            }
+            return nil
+        }
+
+        guard let processed = try ScriptEnvironment.process(scriptsDir: scripts, into: temporaryDirectory, with: variables, fileManager: fileManager) else {
+            return nil
+        }
+        if configuration.strictEnvironment {
+            try failOnUnresolved(processed.unresolved)
+        } else {
+            for (script, keys) in processed.unresolved {
+                console.warning("\(script): unresolved placeholder(s) \(keys.sorted().joined(separator: ", "))")
+            }
+        }
+        console.display("Applied \(variables.count) build variable(s) to install scripts")
+        return processed.directory
+    }
+
+    private func failOnUnresolved(_ unresolved: [String: Set<String>]) throws {
+        guard !unresolved.isEmpty else { return }
+        let detail = unresolved.sorted { $0.key < $1.key }
+            .map { "\($0.key): \($0.value.sorted().joined(separator: ", "))" }
+            .joined(separator: "; ")
+        throw MunkiPkgError.invalidConfiguration("Unresolved script placeholders (--strict-env): \(detail)")
     }
 
     private func packageBOM(for package: URL) throws -> URL {
@@ -88,8 +137,12 @@ private struct PackageBuildContext {
     let configuration: PackageConfiguration
     let layout: PackageProjectLayout
     let temporaryDirectory: URL
+    /// Substituted scripts directory to package instead of `layout.scripts`.
+    var scriptsOverride: URL? = nil
 
     var output: URL { layout.buildDirectory.appendingPathComponent(configuration.name) }
+    /// The scripts directory pkgbuild should package.
+    var effectiveScripts: URL? { scriptsOverride ?? layout.scripts }
 }
 
 /// Normalizes installer scripts before package construction.
@@ -134,7 +187,7 @@ private struct ComponentPackageBuilder {
         if let compression = context.configuration.compression { arguments += ["--compression", compression.rawValue] }
         if let minimumOSVersion = context.configuration.minimumOSVersion { arguments += ["--min-os-version", minimumOSVersion] }
         if context.configuration.usesLargePayload { arguments.append("--large-payload") }
-        if let scripts = context.layout.scripts { arguments += ["--scripts", scripts.path] }
+        if let scripts = context.effectiveScripts { arguments += ["--scripts", scripts.path] }
         if isQuiet { arguments.append("--quiet") }
         if !context.configuration.usesDistributionStyle, !skipsSigning { appendSigningArguments(&arguments, signing: context.configuration.signing) }
         arguments.append(context.output.path)

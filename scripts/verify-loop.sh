@@ -71,6 +71,22 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+ENVSUB="$WORK/EnvSub"
+run "$BIN" --create "$ENVSUB"
+mkdir -p "$ENVSUB/payload/usr/local/bin"
+printf 'x\n' > "$ENVSUB/payload/usr/local/bin/tool"
+printf '%s\n' '#!/bin/sh' 'echo "server=${SERVER_URL}"' 'exit 0' > "$ENVSUB/scripts/postinstall"
+printf 'SERVER_URL=https://mdm.example.edu\n' > "$ENVSUB/.env"
+run "$BIN" "$ENVSUB"
+run /usr/sbin/pkgutil --expand "$ENVSUB/build/EnvSub-1.0.pkg" "$WORK/expanded-envsub"
+POSTINSTALL="$WORK/expanded-envsub/Scripts/postinstall"
+test -f "$POSTINSTALL"
+grep -q 'server=https://mdm.example.edu' "$POSTINSTALL"
+if grep -q '\${SERVER_URL}' "$POSTINSTALL"; then
+    printf 'placeholder was not substituted\n' >&2; exit 1
+fi
+printf 'env substitution OK\n'
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"

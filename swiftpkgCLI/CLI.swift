@@ -36,6 +36,15 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Skip stapling after notarization.")
     public var skipStapling = false
 
+    @Option(name: .long, help: "Path to a .env file of build-time variables substituted into ${VAR} placeholders in scripts. Auto-detects .env in the project if omitted. Values are embedded as plain text in the .pkg — do NOT use for secrets.")
+    public var envFile: String?
+
+    @Flag(name: .long, help: "Fail the build if a script references a ${VAR} with no matching variable (default: warn).")
+    public var strictEnv = false
+
+    @Flag(name: .long, help: "Do not merge SWIFTPKG_* variables from the calling process environment.")
+    public var noInheritEnv = false
+
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
 
@@ -84,7 +93,10 @@ public enum CLICommand {
                 isQuiet: options.quiet,
                 skipsSigning: options.skipSigning,
                 skipsNotarization: options.skipNotarization,
-                skipsStapling: options.skipStapling
+                skipsStapling: options.skipStapling,
+                envFile: options.envFile,
+                strictEnvironment: options.strictEnv,
+                inheritsEnvironment: !options.noInheritEnv
             )
         )
     }
@@ -119,6 +131,9 @@ public enum CLIParser {
       --skip-signing          Skip configured package signing.
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
+      --env-file PATH         Substitute ${VAR} from a .env file into scripts.
+      --strict-env            Fail on unresolved ${VAR} placeholders.
+      --no-inherit-env        Don't merge SWIFTPKG_* from the environment.
     """
 
     public static func parse(_ arguments: [String]) -> CLIParseResult {
