@@ -71,6 +71,26 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+MANIFEST="$WORK/Manifest"
+run "$BIN" --create "$MANIFEST"
+mkdir -p "$MANIFEST/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$MANIFEST/payload/usr/local/bin/tool"
+printf '+ %s\n' "$BIN --output-format json $MANIFEST"
+"$BIN" --output-format json "$MANIFEST" > "$WORK/manifest.json"
+python3 - "$WORK/manifest.json" "$MANIFEST/build/Manifest-1.0.pkg" <<'PY'
+import hashlib, json, sys
+manifest = json.load(open(sys.argv[1]))
+for key in ("name", "version", "identifier", "pkg_path", "sha256", "signed", "notarized", "stapled"):
+    assert key in manifest, f"manifest missing key: {key}"
+assert manifest["signed"] is False and manifest["notarized"] is False and manifest["stapled"] is False
+import os.path
+assert os.path.normpath(manifest["pkg_path"]) == os.path.normpath(sys.argv[2]), f'pkg_path mismatch: {manifest["pkg_path"]}'
+assert os.path.isfile(manifest["pkg_path"]), f'pkg not found: {manifest["pkg_path"]}'
+digest = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+assert manifest["sha256"] == digest, f'sha256 mismatch: {manifest["sha256"]} != {digest}'
+print("manifest OK")
+PY
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"

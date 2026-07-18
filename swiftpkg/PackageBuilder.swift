@@ -1,6 +1,12 @@
 import Darwin
 import Foundation
 
+/// Mutable holder used to carry a value out of a non-escaping async closure.
+private final class Box<Value> {
+    var value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 /// Coordinates the stages that produce, sign, and optionally notarize a package.
 public struct PackageBuildCoordinator: @unchecked Sendable {
     public let fileManager: FileManager
@@ -13,13 +19,16 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         self.console = console
     }
 
-    public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
+    @discardableResult
+    public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws -> BuildResult {
         let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
         let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
         try layout.createBuildDirectoryIfNeeded()
+        let output = layout.buildDirectory.appendingPathComponent(packageConfiguration.name)
+        let stapled = Box(false)
         try await layout.withTemporaryDirectory { temporaryDirectory in
             let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
             let scriptPreparer = ScriptPreparer(fileManager: fileManager, console: console)
@@ -35,9 +44,21 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
                     .buildDistribution(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
             }
             guard let notarization = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
-            try await NotarizationService(runner: runner, console: console)
+            stapled.value = try await NotarizationService(runner: runner, console: console)
                 .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
         }
+        let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
+        let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
+        return BuildResult(
+            name: packageConfiguration.name,
+            version: packageConfiguration.version,
+            identifier: packageConfiguration.identifier,
+            pkgPath: output.path,
+            sha256: try sha256Hex(ofFileAt: output),
+            signed: signed,
+            notarized: notarized,
+            stapled: stapled.value
+        )
     }
 
     private func packageBOM(for package: URL) throws -> URL {
@@ -197,16 +218,20 @@ private struct NotarizationService: Sendable {
     let runner: any ProcessRunning
     let console: Console
 
-    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws {
+    /// Returns whether the package was stapled (false if stapling was skipped or
+    /// the submission never reached acceptance within the timeout).
+    @discardableResult
+    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws -> Bool {
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
         guard let identifier = submission["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
         console.display("id \(identifier)", toolName: "notarytool")
         if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
-        guard !skipsStapling, try await waitForAcceptance(identifier, configuration: configuration) else { return }
+        guard !skipsStapling, try await waitForAcceptance(identifier, configuration: configuration) else { return false }
         console.display("Stapling package")
         try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
         console.display("The staple and validate action worked!")
+        return true
     }
 
     private func waitForAcceptance(_ identifier: String, configuration: NotarizationConfiguration) async throws -> Bool {

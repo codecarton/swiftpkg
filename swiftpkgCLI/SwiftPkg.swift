@@ -29,7 +29,9 @@ public enum SwiftPkg {
                 print(CLIParser.usage)
                 return 0
             }
-            let console = Console(quiet: options.quiet)
+            // json output reserves stdout for the manifest, so suppress human
+            // status there; warnings/errors still go to stderr via Console.
+            let console = Console(quiet: options.quiet || options.outputFormat == .json)
             do {
                 switch command {
                 case let .create(project, format, force):
@@ -52,8 +54,11 @@ public enum SwiftPkg {
                             ? "\(project.path) is not a directory."
                             : "\(project.path): Project not found.")
                     }
-                    try await PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
+                    let result = try await PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
                         .buildPackage(in: project, configuration: configuration)
+                    if options.outputFormat == .json {
+                        print(try result.jsonString())
+                    }
                 }
                 return 0
             } catch {
