@@ -71,6 +71,14 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+OVERRIDE="$WORK/Override"
+run "$BIN" --create "$OVERRIDE"
+mkdir -p "$OVERRIDE/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$OVERRIDE/payload/usr/local/bin/tool"
+run "$BIN" --pkg-version 3.1.4 --output-dir "$WORK/artifacts" "$OVERRIDE"
+test -f "$WORK/artifacts/Override-3.1.4.pkg"
+test ! -e "$OVERRIDE/build/Override-3.1.4.pkg"
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
 printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"

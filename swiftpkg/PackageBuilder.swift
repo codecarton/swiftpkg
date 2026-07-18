@@ -14,11 +14,11 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
     }
 
     public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
-        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
+        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat, versionOverride: configuration.versionOverride)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
-        let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
+        let layout = try PackageProjectLayout(project: project, fileManager: fileManager, outputDirectory: configuration.outputDirectory)
         try layout.createBuildDirectoryIfNeeded()
         try await layout.withTemporaryDirectory { temporaryDirectory in
             let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
@@ -57,7 +57,7 @@ private struct PackageProjectLayout {
     let buildDirectory: URL
     let fileManager: FileManager
 
-    init(project: URL, fileManager: FileManager) throws {
+    init(project: URL, fileManager: FileManager, outputDirectory: URL? = nil) throws {
         self.project = project
         self.fileManager = fileManager
         let payloadURL = project.appendingPathComponent("payload", isDirectory: true)
@@ -67,11 +67,11 @@ private struct PackageProjectLayout {
             scripts = scriptsURL
         } else { scripts = nil }
         guard payload != nil || scripts != nil else { throw MunkiPkgError.message("\(project.path) does not contain a payload folder or a scripts folder.") }
-        buildDirectory = project.appendingPathComponent("build", isDirectory: true)
+        buildDirectory = outputDirectory ?? project.appendingPathComponent("build", isDirectory: true)
     }
 
     func createBuildDirectoryIfNeeded() throws {
-        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: false) }
+        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: true) }
         else if !fileManager.directoryExists(at: buildDirectory) { throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.") }
     }
 
