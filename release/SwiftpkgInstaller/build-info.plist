@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>swiftpkg-${version}-universal.pkg</string>
+	<key>identifier</key>
+	<string>com.codecarton.swiftpkg.installer</string>
+	<key>version</key>
+	<string>0.2.0</string>
+	<key>ownership</key>
+	<string>recommended</string>
+	<key>install_location</key>
+	<string>/</string>
+	<key>compression</key>
+	<string>latest</string>
+	<key>min-os-version</key>
+	<string>15.0</string>
+	<key>postinstall_action</key>
+	<string>none</string>
+	<key>preserve_xattr</key>
+	<true/>
+	<key>suppress_bundle_relocation</key>
+	<true/>
+	<key>distribution_style</key>
+	<true/>
+	<key>title</key>
+	<string>Swiftpkg ${version}</string>
+	<key>product id</key>
+	<string>com.codecarton.swiftpkg</string>
+	<key>signing_info</key>
+	<dict>
+		<key>identity</key>
+		<string>__INSTALLER_SIGN_IDENTITY__</string>
+		<key>timestamp</key>
+		<true/>
+	</dict>
+	<key>notarization_info</key>
+	<dict>
+		<key>keychain_profile</key>
+		<string>__NOTARY_PROFILE__</string>
+		<key>staple_timeout</key>
+		<integer>900</integer>
+	</dict>
+</dict>
+</plist>
