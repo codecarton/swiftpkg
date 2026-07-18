@@ -5,15 +5,45 @@ public enum MunkiPkgError: Error, CustomStringConvertible, LocalizedError {
     case message(String)
     case invalidConfiguration(String)
     case processFailed(tool: String, message: String)
+    case projectExists(String)
+    case importFailed(String)
+    case notarizationFailed(String)
 
     public var description: String {
         switch self {
-        case let .message(value), let .invalidConfiguration(value): value
+        case let .message(value),
+             let .invalidConfiguration(value),
+             let .projectExists(value),
+             let .importFailed(value),
+             let .notarizationFailed(value):
+            value
         case let .processFailed(tool, message): "\(tool): \(message)"
         }
     }
 
     public var errorDescription: String? { description }
+
+    /// Process exit code for this error class. `0` is reserved for success and
+    /// `64` (EX_USAGE) for command-line usage errors; `6` is reserved for a
+    /// future dedicated signing-failure class. See the README exit-code table.
+    public var exitCode: Int32 {
+        switch self {
+        case .message: 1
+        case .projectExists: 2
+        case .invalidConfiguration: 3
+        case .importFailed: 4
+        case .processFailed: 5
+        case .notarizationFailed: 7
+        }
+    }
+}
+
+/// Exit code for a command-line usage/parse error (sysexits.h EX_USAGE).
+public let usageErrorExitCode: Int32 = 64
+
+/// Maps any thrown error to a process exit code, defaulting unknown errors to 1.
+public func exitCode(for error: any Error) -> Int32 {
+    (error as? MunkiPkgError)?.exitCode ?? 1
 }
 
 public struct ProcessResult: Equatable, Sendable {
