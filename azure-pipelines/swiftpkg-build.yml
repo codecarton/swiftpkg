@@ -1,0 +1,121 @@
+# Azure DevOps steps template that builds an Apple installer package from a
+# swiftpkg project directory — the ADO equivalent of this repo's GitHub
+# composite action (action.yml). It installs the swiftpkg release package,
+# optionally lints, builds with --output-format json, and exposes the result
+# as output variables on the 'build' step.
+#
+# Usage from a pipeline in another repo. Reference swiftpkg as a repository
+# resource, then include this template:
+#
+#   resources:
+#     repositories:
+#       - repository: swiftpkg
+#         type: github
+#         name: codecarton/swiftpkg
+#         endpoint: <your GitHub service connection>
+#
+#   steps:
+#     - template: azure-pipelines/swiftpkg-build.yml@swiftpkg
+#       parameters:
+#         projectPath: packages/my-package-project
+#         version: $(Build.SourceBranchName)
+#         lint: true
+#
+# Outputs (from the step named 'build'):
+#   $(build.pkgPath)  $(build.version)  $(build.sha256)
+#
+# Must run on a macOS agent (pool: { vmImage: 'macOS-latest' }).
+
+parameters:
+  - name: projectPath
+    type: string
+  - name: version
+    type: string
+    default: ''
+  - name: outputDir
+    type: string
+    default: 'dist'
+  - name: swiftpkgVersion
+    type: string
+    default: 'latest'
+  - name: lint
+    type: boolean
+    default: false
+  - name: verify
+    type: boolean
+    default: false
+  - name: provenance
+    type: boolean
+    default: false
+  - name: extraArgs
+    type: string
+    default: ''
+
+steps:
+  - bash: |
+      set -euo pipefail
+      if ! command -v jq >/dev/null 2>&1; then
+        echo "##vso[task.logissue type=error]jq is required but was not found. Install it (e.g. 'brew install jq')."
+        exit 1
+      fi
+      repo="codecarton/swiftpkg"
+      if [ "$SWIFTPKG_VERSION" = "latest" ]; then
+        api="https://api.github.com/repos/$repo/releases/latest"
+      else
+        api="https://api.github.com/repos/$repo/releases/tags/$SWIFTPKG_VERSION"
+      fi
+      # The installer package name embeds the version, so resolve the asset URL
+      # from the release metadata rather than guessing the filename.
+      url="$(curl -fsSL "$api" | jq -r '.assets[] | select(.name | test("swiftpkg-.*-universal\\.pkg$")) | .browser_download_url' | head -n1)"
+      if [ -z "$url" ] || [ "$url" = "null" ]; then
+        echo "##vso[task.logissue type=error]Could not find a swiftpkg Universal package asset for '$SWIFTPKG_VERSION'."
+        exit 1
+      fi
+      dest="$AGENT_TEMPDIRECTORY/swiftpkg-universal.pkg"
+      curl -fsSL --retry 3 --retry-delay 2 -o "$dest" "$url"
+      sudo installer -pkg "$dest" -target /
+      swiftpkg --version
+    displayName: 'Install swiftpkg'
+    env:
+      SWIFTPKG_VERSION: ${{ parameters.swiftpkgVersion }}
+
+  - ${{ if eq(parameters.lint, true) }}:
+      - bash: swiftpkg --lint "$PROJECT_PATH"
+        displayName: 'Lint package project'
+        env:
+          PROJECT_PATH: ${{ parameters.projectPath }}
+
+  - bash: |
+      set -euo pipefail
+      # extra-args first so the template's required flags always win and can't be
+      # overridden into a shape that breaks jq parsing.
+      args=()
+      if [ -n "$EXTRA_ARGS" ]; then
+        read -ra extra <<< "$EXTRA_ARGS"
+        args+=("${extra[@]}")
+      fi
+      args+=(--output-format json --output-dir "$OUTPUT_DIR")
+      if [ -n "$PKG_VERSION" ]; then
+        args+=(--pkg-version "$PKG_VERSION")
+      fi
+      # Azure renders booleans as True/False; accept any case.
+      if [ "$(echo "$DO_VERIFY" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+        args+=(--verify)
+      fi
+      if [ "$(echo "$DO_PROVENANCE" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+        args+=(--provenance)
+      fi
+      result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
+      echo "$result"
+      echo "##vso[task.setvariable variable=pkgPath;isOutput=true]$(echo "$result" | jq -r '.pkg_path')"
+      echo "##vso[task.setvariable variable=version;isOutput=true]$(echo "$result" | jq -r '.version')"
+      echo "##vso[task.setvariable variable=sha256;isOutput=true]$(echo "$result" | jq -r '.sha256')"
+    name: build
+    displayName: 'Build package'
+    env:
+      PROJECT_PATH: ${{ parameters.projectPath }}
+      PKG_VERSION: ${{ parameters.version }}
+      OUTPUT_DIR: ${{ parameters.outputDir }}
+      DO_VERIFY: ${{ parameters.verify }}
+      DO_PROVENANCE: ${{ parameters.provenance }}
+      EXTRA_ARGS: ${{ parameters.extraArgs }}
