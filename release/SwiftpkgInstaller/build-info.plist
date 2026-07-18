@@ -7,7 +7,7 @@
 	<key>identifier</key>
 	<string>com.codecarton.swiftpkg.installer</string>
 	<key>version</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>ownership</key>
 	<string>recommended</string>
 	<key>install_location</key>
