@@ -221,6 +221,9 @@ private struct NotarizationService: Sendable {
     let console: Console
 
     func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws {
+        if case let .invalid(reason) = configuration.authentication {
+            throw MunkiPkgError.invalidConfiguration(reason)
+        }
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
         guard let identifier = submission["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
@@ -266,6 +269,7 @@ private struct NotarizationService: Sendable {
         switch configuration.authentication {
         case let .appleID(appleID, teamID, password): return ["--apple-id", appleID, "--team-id", teamID, "--password", password]
         case let .keychainProfile(profile): return ["--keychain-profile", profile]
+        case .invalid: return []  // notarize(package:...) rejects .invalid before reaching here
         }
     }
 }
