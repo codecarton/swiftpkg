@@ -270,7 +270,16 @@ private struct NotarizationService: Sendable {
 private func appendSigningArguments(_ arguments: inout [String], signing: SigningConfiguration?) {
     guard let signing else { return }
     arguments += ["--sign", signing.identity]
-    if let keychain = signing.keychain { arguments += ["--keychain", keychain] }
+    if let keychain = signing.keychain { arguments += ["--keychain", expandKeychainPath(keychain)] }
     for certificate in signing.additionalCertificateNames { arguments += ["--cert", certificate] }
     if let usesTimestamp = signing.usesTimestamp { arguments.append(usesTimestamp ? "--timestamp" : "--timestamp=none") }
+}
+
+/// Expands `${HOME}` and a leading tilde in a build-info keychain path so that
+/// projects written as `${HOME}/Library/Keychains/signing.keychain` resolve to a
+/// real path before being handed to `productbuild`/`productsign`. Mirrors the
+/// original munki-pkg, whose build-info files rely on this expansion.
+func expandKeychainPath(_ path: String) -> String {
+    let withHome = path.replacingOccurrences(of: "${HOME}", with: NSHomeDirectory())
+    return NSString(string: withHome).expandingTildeInPath
 }
