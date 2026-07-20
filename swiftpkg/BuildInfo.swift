@@ -131,12 +131,18 @@ public struct PackageConfiguration: Sendable {
     }
 
     /// Returns a copy with `${version}` substituted in user-facing name fields.
+    /// The resolved package name is normalized to end in `.pkg`: build-info may
+    /// set `name` without the extension (e.g. `MunkiBootstrap`), and munki-pkg
+    /// writes the artifact as `<name>.pkg`, so swiftpkg does too — otherwise the
+    /// output is extensionless and `find '*.pkg'`/munkiimport miss it.
     public func substitutingVersion() -> PackageConfiguration {
         func replacingVersion(in value: String?) -> String? {
             value?.replacingOccurrences(of: "${version}", with: version)
         }
+        let resolvedName = replacingVersion(in: name)!
+        let normalizedName = resolvedName.hasSuffix(".pkg") ? resolvedName : "\(resolvedName).pkg"
         return PackageConfiguration(
-            name: replacingVersion(in: name)!, identifier: identifier, version: version, ownership: ownership,
+            name: normalizedName, identifier: identifier, version: version, ownership: ownership,
             installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
             usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
             preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
