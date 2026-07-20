@@ -86,7 +86,10 @@ private struct PackageProjectLayout {
         if fileManager.directoryExists(at: scriptsURL), try !fileManager.contents(at: scriptsURL).filter({ $0 != ".DS_Store" }).isEmpty {
             scripts = scriptsURL
         } else { scripts = nil }
-        guard payload != nil || scripts != nil else { throw MunkiPkgError.message("\(project.path) does not contain a payload folder or a scripts folder.") }
+        // A project with neither payload nor scripts is valid: it builds a
+        // receipt-only package (pkgbuild --nopayload) that installs no files but
+        // records a receipt, which Munki conditions can key off. munki-pkg
+        // allows this, so swiftpkg does too.
         buildDirectory = project.appendingPathComponent("build", isDirectory: true)
     }
 
