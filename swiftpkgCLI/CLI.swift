@@ -36,6 +36,9 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Skip stapling after notarization.")
     public var skipStapling = false
 
+    @Flag(name: .long, help: "Accepted for munki-pkg compatibility; ignored. swiftpkg never prompts to import into a repo, so there is nothing to skip.")
+    public var skipImport = false
+
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
 
@@ -119,6 +122,7 @@ public enum CLIParser {
       --skip-signing          Skip configured package signing.
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
+      --skip-import           Accepted for munki-pkg compatibility; ignored.
     """
 
     public static func parse(_ arguments: [String]) -> CLIParseResult {
