@@ -222,11 +222,16 @@ struct NotarizationService: Sendable {
             if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.notarizationFailed("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        throw MunkiPkgError.message("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
+        throw MunkiPkgError.notarizationFailed("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
     }
 
     private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
-        let result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
+        let result: ProcessResult
+        do {
+            result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
+        } catch {
+            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+        }
         guard result.status == 0 else { throw MunkiPkgError.notarizationFailed("notarytool: \(failureMessage)") }
         let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
@@ -234,7 +239,13 @@ struct NotarizationService: Sendable {
         } else {
             data = result.stdout
         }
-        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { throw MunkiPkgError.notarizationFailed(failureMessage) }
+        let object: Any
+        do {
+            object = try PropertyListSerialization.propertyList(from: data, format: nil)
+        } catch {
+            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+        }
+        guard let plist = object as? [String: Any] else { throw MunkiPkgError.notarizationFailed(failureMessage) }
         return plist
     }
 

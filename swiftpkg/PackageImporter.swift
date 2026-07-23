@@ -150,7 +150,12 @@ public struct PackageImporter {
 
     private func convertInfoPlist(package: URL, project: URL, format: BuildInfoFormat) throws {
         let url = package.appendingPathComponent("Contents/Info.plist")
-        let object = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
+        let object: Any
+        do {
+            object = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
+        } catch {
+            throw MunkiPkgError.importFailed("Could not read \(url.path): \(error.localizedDescription)")
+        }
         guard let plist = object as? [String: Any] else { throw MunkiPkgError.importFailed("Could not read \(url.path)") }
         let restart = plist["IFPkgFlagRestartAction"] as? String
         let action: String
