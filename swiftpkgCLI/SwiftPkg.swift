@@ -30,8 +30,12 @@ public enum SwiftPkg {
                 return 0
             }
             // json output reserves stdout for the manifest, so suppress human
-            // status there; warnings/errors still go to stderr via Console.
-            let console = Console(quiet: options.quiet || options.outputFormat == .json)
+            // status — but only for builds, which are the only command that
+            // emits a manifest. Other commands keep their normal output.
+            // warnings/errors still go to stderr via Console.
+            let isJSONBuild: Bool
+            if case .build = command { isJSONBuild = options.outputFormat == .json } else { isJSONBuild = false }
+            let console = Console(quiet: options.quiet || isJSONBuild)
             do {
                 switch command {
                 case let .create(project, format, force):

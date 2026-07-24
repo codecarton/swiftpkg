@@ -21,9 +21,9 @@ struct BuildResultTests {
         let file = temp.url.appendingPathComponent("big.bin")
         try Data(repeating: 0x61, count: 3 * (1 << 20) + 7).write(to: file)
         let hex = try sha256Hex(ofFileAt: file)
-        let isAllHex = hex.allSatisfy(\.isHexDigit)
-        #expect(hex.count == 64)
-        #expect(isAllHex)
+        // Known digest of 3 MiB + 7 bytes of 0x61, so a chunk-boundary bug in the
+        // streaming hash would change the value, not just the shape.
+        #expect(hex == "7d8aedf62548b6943c912ca5192d7a2c13322cd689d7a47d4b3944b4bb2e30c6")
     }
 
     @Test("manifest JSON uses snake_case pkg_path and round-trips")
