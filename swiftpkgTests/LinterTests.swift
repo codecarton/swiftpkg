@@ -45,6 +45,48 @@ struct LinterTests {
         #expect(!findings.contains { $0.message.contains(".pkg") })
     }
 
+    @Test("flags malformed dotted identifiers as non-reverse-DNS", arguments: [
+        "noreverse", ".example", "com..example", "com.example.",
+    ])
+    func warnsOnMalformedIdentifier(_ identifier: String) throws {
+        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"\#(identifier)","version":"1.0"}"#)
+        defer { temp.remove() }
+        let findings = try Linter().lint(project: project, requestedFormat: nil)
+        #expect(findings.contains { $0.message.contains("reverse-DNS") })
+    }
+
+    @Test("accepts a well-formed reverse-DNS identifier")
+    func acceptsReverseDNS() throws {
+        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#)
+        defer { temp.remove() }
+        let findings = try Linter().lint(project: project, requestedFormat: nil)
+        #expect(!findings.contains { $0.message.contains("reverse-DNS") })
+    }
+
+    @Test("errors when an install script is a directory")
+    func errorsOnScriptDirectory() throws {
+        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#)
+        defer { temp.remove() }
+        let scripts = project.appendingPathComponent("scripts", isDirectory: true)
+        let postinstall = scripts.appendingPathComponent("postinstall", isDirectory: true)
+        try FileManager.default.createDirectory(at: postinstall, withIntermediateDirectories: true)
+        let findings = try Linter().lint(project: project, requestedFormat: nil)
+        #expect(findings.contains { $0.severity == .error && $0.message.contains("is a directory") })
+    }
+
+    @Test("a scripts-only project (no payload) lints cleanly")
+    func scriptsOnlyProjectIsClean() throws {
+        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#, addPayload: false)
+        defer { temp.remove() }
+        let scripts = project.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
+        let postinstall = scripts.appendingPathComponent("postinstall")
+        try write("#!/bin/sh\necho hi\n", to: postinstall)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: postinstall.path)
+        let findings = try Linter().lint(project: project, requestedFormat: nil)
+        #expect(findings.isEmpty)
+    }
+
     @Test("warns when notarization is configured without signing")
     func warnsNotarizationWithoutSigning() throws {
         let buildInfo = #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0","notarization_info":{"keychain_profile":"p"}}"#

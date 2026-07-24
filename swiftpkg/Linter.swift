@@ -44,8 +44,8 @@ public struct Linter {
 
         if configuration.identifier.isEmpty {
             findings.append(LintFinding(.error, "identifier is empty"))
-        } else if !configuration.identifier.contains(".") {
-            findings.append(LintFinding(.warning, "identifier \"\(configuration.identifier)\" is not reverse-DNS style (no dot)"))
+        } else if !Self.isReverseDNS(configuration.identifier) {
+            findings.append(LintFinding(.warning, "identifier \"\(configuration.identifier)\" is not reverse-DNS style"))
         }
 
         if configuration.version.isEmpty {
@@ -78,11 +78,23 @@ public struct Linter {
         return findings
     }
 
+    /// Reverse-DNS means at least two dot-separated, non-empty components, so
+    /// leading, repeated, and trailing dots (`.a`, `a..b`, `a.b.`) are rejected.
+    static func isReverseDNS(_ identifier: String) -> Bool {
+        let components = identifier.split(separator: ".", omittingEmptySubsequences: false)
+        return components.count >= 2 && components.allSatisfy { !$0.isEmpty }
+    }
+
     private func lintScripts(in scripts: URL) -> [LintFinding] {
         var findings: [LintFinding] = []
         for name in ["preinstall", "postinstall"] {
             let script = scripts.appendingPathComponent(name)
-            guard fileManager.fileExists(atPath: script.path) else { continue }
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: script.path, isDirectory: &isDirectory) else { continue }
+            if isDirectory.boolValue {
+                findings.append(LintFinding(.error, "\(name) is a directory, but an install script must be a regular file"))
+                continue
+            }
             if let data = fileManager.contents(atPath: script.path), !data.starts(with: Data("#!".utf8)) {
                 findings.append(LintFinding(.warning, "\(name) script does not start with a shebang (#!)"))
             }
