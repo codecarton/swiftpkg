@@ -57,17 +57,34 @@ runs:
       run: |
         set -euo pipefail
         runner_tmp="${RUNNER_TEMP:-/tmp}"
+        # Download into a fresh directory so a stale or unexpected package left
+        # in the runner temp can't be picked up.
+        download_dir="$(mktemp -d "$runner_tmp/swiftpkg-install.XXXXXX")"
         # swiftpkg releases a Universal installer package named
         # swiftpkg-<version>-universal.pkg; the version is embedded in the
         # filename, so match it with a pattern rather than a fixed URL.
+        # Pinning swiftpkg-version to a release tag is recommended over 'latest'.
         if [ "$SWIFTPKG_VERSION" = "latest" ]; then
           gh release download --repo codecarton/swiftpkg \
-            --pattern 'swiftpkg-*-universal.pkg' --dir "$runner_tmp"
+            --pattern 'swiftpkg-*-universal.pkg' --dir "$download_dir"
         else
           gh release download "$SWIFTPKG_VERSION" --repo codecarton/swiftpkg \
-            --pattern 'swiftpkg-*-universal.pkg' --dir "$runner_tmp"
+            --pattern 'swiftpkg-*-universal.pkg' --dir "$download_dir"
         fi
-        sudo installer -pkg "$runner_tmp"/swiftpkg-*-universal.pkg -target /
+        # Require exactly one matching asset, so an ambiguous release can't cause
+        # a surprising package to be installed as root.
+        shopt -s nullglob
+        pkgs=("$download_dir"/swiftpkg-*-universal.pkg)
+        if [ "${#pkgs[@]}" -ne 1 ]; then
+          echo "Expected exactly one swiftpkg installer, found ${#pkgs[@]}: ${pkgs[*]:-none}" >&2
+          exit 1
+        fi
+        pkg="${pkgs[0]}"
+        # Verify the Developer ID signature and notarization before running the
+        # installer as root, so a tampered or unsigned asset is rejected.
+        pkgutil --check-signature "$pkg"
+        spctl --assess --type install -vv "$pkg"
+        sudo installer -pkg "$pkg" -target /
         swiftpkg --version
 
     - name: Lint

@@ -65,14 +65,20 @@ steps:
         api="https://api.github.com/repos/$repo/releases/tags/$SWIFTPKG_VERSION"
       fi
       # The installer package name embeds the version, so resolve the asset URL
-      # from the release metadata rather than guessing the filename.
-      url="$(curl -fsSL "$api" | jq -r '.assets[] | select(.name | test("swiftpkg-.*-universal\\.pkg$")) | .browser_download_url' | head -n1)"
-      if [ -z "$url" ] || [ "$url" = "null" ]; then
+      # from the release metadata rather than guessing the filename. Select the
+      # first match inside jq — piping to `head` under pipefail can SIGPIPE jq
+      # and fail the step when more than one asset matches.
+      url="$(curl -fsSL "$api" | jq -er 'first(.assets[] | select(.name | test("swiftpkg-.*-universal\\.pkg$")) | .browser_download_url)')" || url=""
+      if [ -z "$url" ]; then
         echo "##vso[task.logissue type=error]Could not find a swiftpkg Universal package asset for '$SWIFTPKG_VERSION'."
         exit 1
       fi
       dest="$AGENT_TEMPDIRECTORY/swiftpkg-universal.pkg"
       curl -fsSL --retry 3 --retry-delay 2 -o "$dest" "$url"
+      # Verify signature and notarization before running the installer as root.
+      # Pinning swiftpkgVersion to a release tag is recommended over 'latest'.
+      pkgutil --check-signature "$dest"
+      spctl --assess --type install -vv "$dest"
       sudo installer -pkg "$dest" -target /
       swiftpkg --version
     displayName: 'Install swiftpkg'
@@ -107,9 +113,16 @@ steps:
       fi
       result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
       echo "$result"
-      echo "##vso[task.setvariable variable=pkgPath;isOutput=true]$(echo "$result" | jq -r '.pkg_path')"
-      echo "##vso[task.setvariable variable=version;isOutput=true]$(echo "$result" | jq -r '.version')"
-      echo "##vso[task.setvariable variable=sha256;isOutput=true]$(echo "$result" | jq -r '.sha256')"
+      # Extract with `jq -er` so a null/missing field fails the step rather than
+      # silently publishing an empty output variable, and strip any CR/LF so the
+      # value can't inject a second Azure logging command.
+      emit() { printf '%s' "$1" | tr -d '\r\n'; }
+      pkg_path="$(printf '%s' "$result" | jq -er '.pkg_path')"
+      version="$(printf '%s' "$result" | jq -er '.version')"
+      sha256="$(printf '%s' "$result" | jq -er '.sha256')"
+      echo "##vso[task.setvariable variable=pkgPath;isOutput=true]$(emit "$pkg_path")"
+      echo "##vso[task.setvariable variable=version;isOutput=true]$(emit "$version")"
+      echo "##vso[task.setvariable variable=sha256;isOutput=true]$(emit "$sha256")"
     name: build
     displayName: 'Build package'
     env:

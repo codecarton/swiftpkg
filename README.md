@@ -247,7 +247,7 @@ Inputs: `project-path` (required), `version` (→ `--pkg-version`), `output-dir`
 `swiftpkg-version`, `lint`, `verify`, `provenance`, `extra-args`. Outputs:
 `pkg-path`, `version`, `sha256`. Requires a swiftpkg release that includes the
 CI flags (`--output-format`, `--output-dir`, `--pkg-version`, `--lint`,
-`--verify`).
+`--verify`, `--provenance`).
 
 ## Marketing site
 
