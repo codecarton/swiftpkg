@@ -84,4 +84,46 @@ struct ProvenanceTests {
         let second = try builder.build(configuration: config, output: output, project: project).inputDigest
         #expect(first != second)
     }
+
+    private func makeDigestFixture() throws -> (TemporaryDirectory, URL, URL, ProvenanceBuilder, PackageConfiguration) {
+        let temp = try TemporaryDirectory()
+        let project = temp.url.appendingPathComponent("P", isDirectory: true)
+        let payload = project.appendingPathComponent("payload", isDirectory: true)
+        try FileManager.default.createDirectory(at: payload, withIntermediateDirectories: true)
+        try write(#"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#, to: project.appendingPathComponent("build-info.json"))
+        let output = project.appendingPathComponent("build/App-1.0.pkg")
+        try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try write("PKG", to: output)
+        let builder = ProvenanceBuilder(runner: GitRunner(), fileManager: .default)
+        let config = try BuildInfoStore.load(from: project, requestedFormat: nil)
+        return (temp, project, payload, builder, config)
+    }
+
+    @Test("input digest changes when a file's executable bit is toggled")
+    func digestChangesWithPermissions() throws {
+        let (temp, project, payload, builder, config) = try makeDigestFixture()
+        defer { temp.remove() }
+        let script = payload.appendingPathComponent("run.sh")
+        try write("#!/bin/sh\n", to: script)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: script.path)
+        let before = try builder.build(configuration: config, output: output(for: project), project: project).inputDigest
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let after = try builder.build(configuration: config, output: output(for: project), project: project).inputDigest
+        #expect(before != after)
+    }
+
+    @Test("input digest changes when a symlink's target changes")
+    func digestChangesWithSymlinkTarget() throws {
+        let (temp, project, payload, builder, config) = try makeDigestFixture()
+        defer { temp.remove() }
+        let link = payload.appendingPathComponent("Current")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "A")
+        let before = try builder.build(configuration: config, output: output(for: project), project: project).inputDigest
+        try FileManager.default.removeItem(at: link)
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "B")
+        let after = try builder.build(configuration: config, output: output(for: project), project: project).inputDigest
+        #expect(before != after)
+    }
+
+    private func output(for project: URL) -> URL { project.appendingPathComponent("build/App-1.0.pkg") }
 }

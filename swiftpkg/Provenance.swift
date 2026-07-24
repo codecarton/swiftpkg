@@ -69,10 +69,10 @@ public struct ProvenanceBuilder {
         for subdirectory in ["payload", "scripts"] {
             let directory = project.appendingPathComponent(subdirectory, isDirectory: true)
             guard fileManager.directoryExists(at: directory) else { continue }
-            guard let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) else { continue }
+            guard let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { continue }
             for case let fileURL as URL in enumerator {
-                let isRegular = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
-                guard isRegular else { continue }
+                let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                guard values?.isRegularFile == true || values?.isSymbolicLink == true else { continue }
                 entries.append((relativePath(of: fileURL, under: project), fileURL))
             }
         }
@@ -86,7 +86,13 @@ public struct ProvenanceBuilder {
         for entry in entries {
             hasher.update(data: Data(entry.path.utf8))
             hasher.update(data: Data([0]))
-            hasher.update(data: try Data(contentsOf: entry.url))
+            let mode = (try fileManager.attributesOfItem(atPath: entry.url.path)[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
+            hasher.update(data: withUnsafeBytes(of: (mode & 0o7777).littleEndian) { Data($0) })
+            if let destination = try? fileManager.destinationOfSymbolicLink(atPath: entry.url.path) {
+                hasher.update(data: Data(destination.utf8))
+            } else {
+                hasher.update(data: try Data(contentsOf: entry.url))
+            }
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
