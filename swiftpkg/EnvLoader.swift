@@ -158,7 +158,7 @@ public enum ScriptEnvironment {
                 let sourcePermissions = ((try? fileManager.attributesOfItem(atPath: source.path))?[.posixPermissions] as? Int) ?? 0o700
                 try fileManager.setAttributes([.posixPermissions: (sourcePermissions & 0o700) | 0o100], ofItemAtPath: destination.path)
             } else {
-                try? fileManager.copyItem(at: source, to: destination)
+                try fileManager.copyItem(at: source, to: destination)
             }
         }
         return (processedDir, unresolvedByScript)
