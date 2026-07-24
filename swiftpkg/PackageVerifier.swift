@@ -5,11 +5,15 @@ import Foundation
 struct PackageVerifier {
     let runner: any ProcessRunning
     let console: Console
+    var fileManager: FileManager = .default
 
     /// - Parameters:
+    ///   - expectedIdentifier: the `identifier` build-info declared.
+    ///   - expectedVersion: the `version` build-info declared.
     ///   - signed: signing was requested, so a valid signature must be present.
     ///   - notarized: notarization was requested, so Gatekeeper must accept it.
-    func verify(package: URL, signed: Bool, notarized: Bool) throws {
+    func verify(package: URL, expectedIdentifier: String, expectedVersion: String, signed: Bool, notarized: Bool) throws {
+        try verifyMetadata(package: package, expectedIdentifier: expectedIdentifier, expectedVersion: expectedVersion)
         if signed {
             let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--check-signature", package.path])
             guard result.status == 0 else {
@@ -26,8 +30,54 @@ struct PackageVerifier {
         }
     }
 
+    /// Confirms the built package embeds the identifier and version build-info
+    /// declared, so a stale or mismatched artifact can't silently pass `--verify`.
+    ///
+    /// Best-effort: component packages carry a top-level `PackageInfo`; if it
+    /// can't be extracted (e.g. a distribution-style package, whose metadata
+    /// lives elsewhere), the check is skipped rather than failing the build.
+    private func verifyMetadata(package: URL, expectedIdentifier: String, expectedVersion: String) throws {
+        let scratch = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-verify-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: scratch) }
+        let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--expand", package.path, scratch.path])
+        guard result.status == 0,
+              let data = try? Data(contentsOf: scratch.appendingPathComponent("PackageInfo")),
+              let xml = String(data: data, encoding: .utf8)
+        else { return }
+        if let mismatch = Self.metadataMismatch(expectedIdentifier: expectedIdentifier, expectedVersion: expectedVersion, packageInfoXML: xml) {
+            throw MunkiPkgError.message("Verification failed: \(mismatch)")
+        }
+        console.display("Verified package identifier and version")
+    }
+
+    /// Parses a `PackageInfo` document and returns a human-readable message if
+    /// its `identifier`/`version` differ from what was expected, else `nil`.
+    /// Pure and side-effect free so it can be unit-tested without a subprocess.
+    static func metadataMismatch(expectedIdentifier: String, expectedVersion: String, packageInfoXML: String) -> String? {
+        let parser = XMLParser(data: Data(packageInfoXML.utf8))
+        let delegate = PackageInfoAttributes()
+        parser.delegate = delegate
+        guard parser.parse(), let actual = delegate.pkgInfo else { return nil }
+        if let identifier = actual["identifier"], identifier != expectedIdentifier {
+            return "package identifier is \"\(identifier)\" but build-info declares \"\(expectedIdentifier)\"."
+        }
+        if let version = actual["version"], version != expectedVersion {
+            return "package version is \"\(version)\" but build-info declares \"\(expectedVersion)\"."
+        }
+        return nil
+    }
+
     private func diagnostics(_ result: ProcessResult) -> String {
         let text = (result.stderrString + result.stdoutString).trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? "(no output)" : text
+    }
+}
+
+/// Captures the attributes of a `PackageInfo`'s root `pkg-info` element.
+private final class PackageInfoAttributes: NSObject, XMLParserDelegate {
+    private(set) var pkgInfo: [String: String]?
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+        if elementName == "pkg-info", pkgInfo == nil { pkgInfo = attributeDict }
     }
 }

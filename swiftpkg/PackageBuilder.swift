@@ -44,7 +44,7 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
             let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
             let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
             try PackageVerifier(runner: runner, console: console)
-                .verify(package: output, signed: signed, notarized: notarized)
+                .verify(package: output, expectedIdentifier: packageConfiguration.identifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
         }
     }
 
