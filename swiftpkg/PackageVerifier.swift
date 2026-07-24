@@ -40,8 +40,13 @@ struct PackageVerifier {
         let scratch = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-verify-\(UUID().uuidString)", isDirectory: true)
         defer { try? fileManager.removeItem(at: scratch) }
         let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--expand", package.path, scratch.path])
-        guard result.status == 0,
-              let data = try? Data(contentsOf: scratch.appendingPathComponent("PackageInfo")),
+        guard result.status == 0 else {
+            throw MunkiPkgError.message("Verification failed: could not expand \(package.lastPathComponent) to inspect its metadata. \(diagnostics(result))")
+        }
+        // A component package carries a top-level PackageInfo. If it's absent
+        // (e.g. a distribution-style package, whose metadata lives elsewhere)
+        // the metadata check is skipped rather than failing the build.
+        guard let data = try? Data(contentsOf: scratch.appendingPathComponent("PackageInfo")),
               let xml = String(data: data, encoding: .utf8)
         else { return }
         if let mismatch = Self.metadataMismatch(expectedIdentifier: expectedIdentifier, expectedVersion: expectedVersion, packageInfoXML: xml) {
@@ -58,10 +63,18 @@ struct PackageVerifier {
         let delegate = PackageInfoAttributes()
         parser.delegate = delegate
         guard parser.parse(), let actual = delegate.pkgInfo else { return nil }
-        if let identifier = actual["identifier"], identifier != expectedIdentifier {
+        // A PackageInfo we could parse but that omits identifier/version is
+        // incomplete and must not silently pass.
+        guard let identifier = actual["identifier"] else {
+            return "package PackageInfo is missing an identifier."
+        }
+        if identifier != expectedIdentifier {
             return "package identifier is \"\(identifier)\" but build-info declares \"\(expectedIdentifier)\"."
         }
-        if let version = actual["version"], version != expectedVersion {
+        guard let version = actual["version"] else {
+            return "package PackageInfo is missing a version."
+        }
+        if version != expectedVersion {
             return "package version is \"\(version)\" but build-info declares \"\(expectedVersion)\"."
         }
         return nil

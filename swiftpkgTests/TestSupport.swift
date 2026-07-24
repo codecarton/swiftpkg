@@ -24,10 +24,12 @@ final class RecordingRunner: ProcessRunning, @unchecked Sendable {
 
     var calls: [Call] = []
     var result = ProcessResult(status: 0, stdout: Data(), stderr: Data())
+    /// When set, chooses the result per call; falls back to `result` when nil.
+    var resultProvider: ((_ executable: String, _ arguments: [String]) -> ProcessResult)?
 
     func run(executable: String, arguments: [String]) throws -> ProcessResult {
         calls.append(Call(executable: executable, arguments: arguments))
-        return result
+        return resultProvider?(executable, arguments) ?? result
     }
 }
 
