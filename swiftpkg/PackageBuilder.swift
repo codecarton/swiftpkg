@@ -14,12 +14,12 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
     }
 
     public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
-        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
+        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat, versionOverride: configuration.versionOverride)
         try Self.validatePackageName(packageConfiguration.name)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
-        let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
+        let layout = try PackageProjectLayout(project: project, fileManager: fileManager, outputDirectory: configuration.outputDirectory)
         try layout.createBuildDirectoryIfNeeded()
         try await layout.withTemporaryDirectory { temporaryDirectory in
             let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
@@ -77,7 +77,7 @@ private struct PackageProjectLayout {
     let buildDirectory: URL
     let fileManager: FileManager
 
-    init(project: URL, fileManager: FileManager) throws {
+    init(project: URL, fileManager: FileManager, outputDirectory: URL? = nil) throws {
         self.project = project
         self.fileManager = fileManager
         let payloadURL = project.appendingPathComponent("payload", isDirectory: true)
@@ -90,11 +90,11 @@ private struct PackageProjectLayout {
         // receipt-only package (pkgbuild --nopayload) that installs no files but
         // records a receipt, which Munki conditions can key off. munki-pkg
         // allows this, so swiftpkg does too.
-        buildDirectory = project.appendingPathComponent("build", isDirectory: true)
+        buildDirectory = outputDirectory ?? project.appendingPathComponent("build", isDirectory: true)
     }
 
     func createBuildDirectoryIfNeeded() throws {
-        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: false) }
+        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: true) }
         else if !fileManager.directoryExists(at: buildDirectory) { throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.") }
     }
 
@@ -216,7 +216,7 @@ private struct DistributionPackageBuilder {
 }
 
 /// Uploads a package to Apple notarization and optionally staples it.
-private struct NotarizationService: Sendable {
+struct NotarizationService: Sendable {
     let runner: any ProcessRunning
     let console: Console
 
@@ -226,7 +226,7 @@ private struct NotarizationService: Sendable {
         }
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
-        guard let identifier = submission["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
+        guard let identifier = submission["id"] as? String else { throw MunkiPkgError.notarizationFailed("Unexpected output from notarytool") }
         console.display("id \(identifier)", toolName: "notarytool")
         if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
         guard !skipsStapling, try await waitForAcceptance(identifier, configuration: configuration) else { return }
@@ -245,23 +245,33 @@ private struct NotarizationService: Sendable {
             let status = output["status"] as? String ?? "Unknown"
             let message = output["message"] as? String ?? ""
             if status == "Accepted" { console.display("Notarization successful. \(message)"); return true }
-            if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.message("Notarization failed (\(status)): \(message)") }
+            if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.notarizationFailed("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        console.warning("Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.")
-        return false
+        throw MunkiPkgError.notarizationFailed("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
     }
 
     private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
-        let result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
-        guard result.status == 0 else { throw MunkiPkgError.processFailed(tool: "notarytool", message: failureMessage) }
+        let result: ProcessResult
+        do {
+            result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
+        } catch {
+            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+        }
+        guard result.status == 0 else { throw MunkiPkgError.notarizationFailed("notarytool: \(failureMessage)") }
         let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
             data = Data(result.stdoutString[result.stdoutString.index(after: newline)...].utf8)
         } else {
             data = result.stdout
         }
-        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { throw MunkiPkgError.message(failureMessage) }
+        let object: Any
+        do {
+            object = try PropertyListSerialization.propertyList(from: data, format: nil)
+        } catch {
+            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+        }
+        guard let plist = object as? [String: Any] else { throw MunkiPkgError.notarizationFailed(failureMessage) }
         return plist
     }
 

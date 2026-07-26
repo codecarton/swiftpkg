@@ -42,6 +42,12 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
 
+    @Option(name: .long, help: "Override the build-info version (e.g. from a git tag or CI variable). Resolved before ${version} substitution.")
+    public var pkgVersion: String?
+
+    @Option(name: .long, help: "Write the built package to this directory instead of the project's build/ directory. Created if it does not exist.")
+    public var outputDir: String?
+
     @Argument(help: "The package project directory.")
     public var projectDirectory: String?
 
@@ -87,7 +93,9 @@ public enum CLICommand {
                 isQuiet: options.quiet,
                 skipsSigning: options.skipSigning,
                 skipsNotarization: options.skipNotarization,
-                skipsStapling: options.skipStapling
+                skipsStapling: options.skipStapling,
+                versionOverride: options.pkgVersion,
+                outputDirectory: options.outputDir.map { URL(fileURLWithPath: $0).standardizedFileURL }
             )
         )
     }
@@ -123,6 +131,8 @@ public enum CLIParser {
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
       --skip-import           Accepted for munki-pkg compatibility; ignored.
+      --pkg-version VERSION   Override the build-info version.
+      --output-dir DIR        Write the package to DIR instead of build/.
     """
 
     public static func parse(_ arguments: [String]) -> CLIParseResult {
