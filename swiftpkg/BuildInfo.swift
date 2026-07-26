@@ -49,6 +49,10 @@ public struct NotarizationConfiguration: Sendable {
     public enum Authentication: Sendable {
         case appleID(appleID: String, teamID: String, password: String)
         case keychainProfile(String)
+        /// notarization_info was present but incomplete. Loading tolerates this
+        /// so `--skip-notarization` builds still succeed; the error surfaces only
+        /// if notarization is actually attempted.
+        case invalid(reason: String)
     }
 
     public let authentication: Authentication
@@ -154,12 +158,18 @@ public struct PackageConfiguration: Sendable {
     }
 
     /// Returns a copy with `${version}` substituted in user-facing name fields.
+    /// The resolved package name is normalized to end in `.pkg`: build-info may
+    /// set `name` without the extension (e.g. `MunkiBootstrap`), and munki-pkg
+    /// writes the artifact as `<name>.pkg`, so swiftpkg does too — otherwise the
+    /// output is extensionless and `find '*.pkg'`/munkiimport miss it.
     public func substitutingVersion() -> PackageConfiguration {
         func replacingVersion(in value: String?) -> String? {
             value?.replacingOccurrences(of: "${version}", with: version)
         }
+        let resolvedName = replacingVersion(in: name)!
+        let normalizedName = resolvedName.hasSuffix(".pkg") ? resolvedName : "\(resolvedName).pkg"
         return PackageConfiguration(
-            name: replacingVersion(in: name)!, identifier: identifier, version: version, ownership: ownership,
+            name: normalizedName, identifier: identifier, version: version, ownership: ownership,
             installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
             usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
             preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
@@ -227,7 +237,10 @@ public struct PackageConfiguration: Sendable {
         } else if let profile = notary["keychain_profile"] as? String {
             authentication = .keychainProfile(profile)
         } else {
-            throw MunkiPkgError.invalidConfiguration("notarization_info must specify apple_id + team_id or keychain_profile")
+            // Tolerate incomplete notarization_info at load time so
+            // --skip-notarization builds succeed. munki-pkg defers this check to
+            // the point notarization actually runs; so does swiftpkg.
+            authentication = .invalid(reason: "notarization_info must specify apple_id + team_id or keychain_profile")
         }
         let timeout = (notary["staple_timeout"] as? NSNumber)?.intValue ?? 300
         return NotarizationConfiguration(authentication: authentication, staplingTimeout: timeout)
@@ -252,6 +265,7 @@ private extension NotarizationConfiguration {
         case let .appleID(appleID, teamID, password):
             values.merge(["apple_id": appleID, "team_id": teamID, "password": password]) { _, new in new }
         case let .keychainProfile(profile): values["keychain_profile"] = profile
+        case .invalid: break
         }
         return values
     }

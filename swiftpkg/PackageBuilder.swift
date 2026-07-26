@@ -15,6 +15,7 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
 
     public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
         let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat, versionOverride: configuration.versionOverride)
+        try Self.validatePackageName(packageConfiguration.name)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
@@ -47,6 +48,25 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         }
         return URL(fileURLWithPath: String(path))
     }
+
+    /// Rejects a package `name` that could escape the build directory.
+    ///
+    /// The output package path is `build/<name>` (and `build/Dist-<name>` for
+    /// distribution builds), so a `name` containing a path separator or `..`
+    /// would write the artifact outside `build/`. Require a single, safe path
+    /// component. Called with the post-`${version}`-substitution name.
+    static func validatePackageName(_ name: String) throws {
+        guard !name.isEmpty,
+              name != ".", name != "..",
+              !name.contains("/"),
+              !name.contains("\0"),
+              URL(fileURLWithPath: name).lastPathComponent == name
+        else {
+            throw MunkiPkgError.invalidConfiguration(
+                "Package name \"\(name)\" must be a single path component (no \"/\" or \"..\")."
+            )
+        }
+    }
 }
 
 /// Describes the files and directories involved in one package build.
@@ -66,7 +86,10 @@ private struct PackageProjectLayout {
         if fileManager.directoryExists(at: scriptsURL), try !fileManager.contents(at: scriptsURL).filter({ $0 != ".DS_Store" }).isEmpty {
             scripts = scriptsURL
         } else { scripts = nil }
-        guard payload != nil || scripts != nil else { throw MunkiPkgError.message("\(project.path) does not contain a payload folder or a scripts folder.") }
+        // A project with neither payload nor scripts is valid: it builds a
+        // receipt-only package (pkgbuild --nopayload) that installs no files but
+        // records a receipt, which Munki conditions can key off. munki-pkg
+        // allows this, so swiftpkg does too.
         buildDirectory = outputDirectory ?? project.appendingPathComponent("build", isDirectory: true)
     }
 
@@ -198,6 +221,9 @@ struct NotarizationService: Sendable {
     let console: Console
 
     func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws {
+        if case let .invalid(reason) = configuration.authentication {
+            throw MunkiPkgError.invalidConfiguration(reason)
+        }
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
         guard let identifier = submission["id"] as? String else { throw MunkiPkgError.notarizationFailed("Unexpected output from notarytool") }
@@ -253,6 +279,7 @@ struct NotarizationService: Sendable {
         switch configuration.authentication {
         case let .appleID(appleID, teamID, password): return ["--apple-id", appleID, "--team-id", teamID, "--password", password]
         case let .keychainProfile(profile): return ["--keychain-profile", profile]
+        case .invalid: return []  // notarize(package:...) rejects .invalid before reaching here
         }
     }
 }
@@ -260,7 +287,16 @@ struct NotarizationService: Sendable {
 private func appendSigningArguments(_ arguments: inout [String], signing: SigningConfiguration?) {
     guard let signing else { return }
     arguments += ["--sign", signing.identity]
-    if let keychain = signing.keychain { arguments += ["--keychain", keychain] }
+    if let keychain = signing.keychain { arguments += ["--keychain", expandKeychainPath(keychain)] }
     for certificate in signing.additionalCertificateNames { arguments += ["--cert", certificate] }
     if let usesTimestamp = signing.usesTimestamp { arguments.append(usesTimestamp ? "--timestamp" : "--timestamp=none") }
+}
+
+/// Expands `${HOME}` and a leading tilde in a build-info keychain path so that
+/// projects written as `${HOME}/Library/Keychains/signing.keychain` resolve to a
+/// real path before being handed to `productbuild`/`productsign`. Mirrors the
+/// original munki-pkg, whose build-info files rely on this expansion.
+func expandKeychainPath(_ path: String) -> String {
+    let withHome = path.replacingOccurrences(of: "${HOME}", with: NSHomeDirectory())
+    return NSString(string: withHome).expandingTildeInPath
 }

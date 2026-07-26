@@ -58,6 +58,15 @@ run "$BIN" "$EMPTY"
 run /usr/sbin/pkgutil --expand "$EMPTY/build/EmptyPayload-1.0.pkg" "$WORK/expanded-empty"
 test -e "$WORK/expanded-empty/Payload"
 
+RECEIPT="$WORK/ReceiptOnly"
+run "$BIN" --create "$RECEIPT"
+rm -rf "$RECEIPT/payload" "$RECEIPT/scripts"
+run "$BIN" "$RECEIPT"
+run /usr/sbin/pkgutil --expand "$RECEIPT/build/ReceiptOnly-1.0.pkg" "$WORK/expanded-receipt"
+test ! -e "$WORK/expanded-receipt/Payload"
+test ! -e "$WORK/expanded-receipt/Scripts"
+printf 'receipt-only package OK\n'
+
 for format in json yaml; do
     PROJECT_FORMAT="$WORK/Format-$format"
     if [ "$format" = json ]; then
