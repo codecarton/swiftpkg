@@ -126,6 +126,33 @@ public struct PackageConfiguration: Sendable {
         notarization = try Self.notarizationConfiguration(in: values)
     }
 
+    /// Returns a copy with the version replaced, before `${version}` substitution.
+    public func withVersion(_ newVersion: String) -> PackageConfiguration {
+        PackageConfiguration(
+            name: name, identifier: identifier, version: newVersion, ownership: ownership,
+            installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
+            usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
+            preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
+            usesDistributionStyle: usesDistributionStyle, title: title, productIdentifier: productIdentifier,
+            signing: signing, notarization: notarization
+        )
+    }
+
+    /// Returns a copy with dynamic version tokens (${TIMESTAMP}/${DATE}/${DATETIME})
+    /// resolved in the version field, before `${version}` name substitution.
+    public func resolvingDynamicVersion(now: Date = Date()) -> PackageConfiguration {
+        let resolved = DynamicVersion.resolve(version, now: now)
+        guard resolved != version else { return self }
+        return PackageConfiguration(
+            name: name, identifier: identifier, version: resolved, ownership: ownership,
+            installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
+            usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
+            preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
+            usesDistributionStyle: usesDistributionStyle, title: title, productIdentifier: productIdentifier,
+            signing: signing, notarization: notarization
+        )
+    }
+
     /// Returns a copy with `${version}` substituted in user-facing name fields.
     public func substitutingVersion() -> PackageConfiguration {
         func replacingVersion(in value: String?) -> String? {
@@ -232,9 +259,11 @@ private extension NotarizationConfiguration {
 
 /// Loads and saves package configuration files in plist, JSON, or YAML form.
 public enum BuildInfoStore {
-    public static func load(from project: URL, requestedFormat: BuildInfoFormat?, fileManager: FileManager = .default) throws -> PackageConfiguration {
+    public static func load(from project: URL, requestedFormat: BuildInfoFormat?, versionOverride: String? = nil, fileManager: FileManager = .default) throws -> PackageConfiguration {
         let document = try discover(in: project, requestedFormat: requestedFormat, fileManager: fileManager)
-        return try loadTemplate(from: document.url, defaultsFor: project).substitutingVersion()
+        let template = try loadTemplate(from: document.url, defaultsFor: project)
+        let versioned = versionOverride.map(template.withVersion) ?? template
+        return versioned.resolvingDynamicVersion().substitutingVersion()
     }
 
     public static func loadTemplate(from project: URL, requestedFormat: BuildInfoFormat? = nil, fileManager: FileManager = .default) throws -> PackageConfiguration {
