@@ -120,6 +120,48 @@ public enum ScriptEnvironment {
         scriptNames.contains(name) || name.hasSuffix(".sh") || name.hasSuffix(".py")
     }
 
+    /// Matches the ways a shell script introduces a name it owns: a plain or
+    /// keyword-prefixed assignment (`n=`, `local n=`, `export -f n=`), a bare
+    /// declaration (`local n`), a loop variable (`for n in`), or `read n`.
+    /// Deliberately line-oriented and permissive — a false positive here only
+    /// costs one suppressed warning, while a false negative restores the noise.
+    private static let assignmentPatterns: [NSRegularExpression] = {
+        let declarators = "local|declare|typeset|export|readonly"
+        return [
+            // Any assignment, wherever it sits on the line — this is what catches
+            // the second and third names in `local key="$1" type="$2" val="$3"`.
+            #"(?m)(?:^|[[:blank:]])([A-Za-z_][A-Za-z0-9_]*)="#,
+            // Declaration with no value: `local declared;` or `local declared`.
+            #"(?m)(?:^|[[:blank:]])(?:\#(declarators))[[:blank:]]+(?:-[A-Za-z]+[[:blank:]]+)*([A-Za-z_][A-Za-z0-9_]*)[[:blank:]]*(?:;|$)"#,
+            #"(?m)\bfor[[:blank:]]+([A-Za-z_][A-Za-z0-9_]*)[[:blank:]]+in\b"#,
+            #"(?m)\bread[[:blank:]]+(?:-[A-Za-z]+[[:blank:]]+)*([A-Za-z_][A-Za-z0-9_]*)"#,
+        ].compactMap { try? NSRegularExpression(pattern: $0) }
+    }()
+
+    /// Names the script assigns itself, and therefore resolves at install time.
+    /// `${VAR}` is ambiguous by construction: it is both the build-time
+    /// substitution syntax and ordinary shell expansion, so a name the script
+    /// declares is a shell variable, not a placeholder anyone forgot to supply.
+    static func shellOwnedNames(in content: String) -> Set<String> {
+        let ns = content as NSString
+        let whole = NSRange(location: 0, length: ns.length)
+        var owned: Set<String> = []
+        for pattern in assignmentPatterns {
+            for match in pattern.matches(in: content, range: whole) where match.numberOfRanges > 1 {
+                let range = match.range(at: 1)
+                if range.location != NSNotFound { owned.insert(ns.substring(with: range)) }
+            }
+        }
+        return owned
+    }
+
+    /// Unresolved placeholders worth reporting: referenced by the script, absent
+    /// from `variables`, and not a name the script declares for itself.
+    static func reportableUnresolved(in content: String, with variables: [String: String]) -> Set<String> {
+        PlaceholderReplacer.replace(in: content, with: variables).unresolved
+            .subtracting(shellOwnedNames(in: content))
+    }
+
     /// Returns placeholder names referenced by any script but not in `variables`.
     public static func unresolvedPlaceholders(in scriptsDir: URL, given variables: [String: String], fileManager: FileManager = .default) -> [String: Set<String>] {
         let contents = (try? fileManager.contentsOfDirectory(atPath: scriptsDir.path)) ?? []
@@ -127,7 +169,7 @@ public enum ScriptEnvironment {
         for name in contents where isScript(name) {
             let path = scriptsDir.appendingPathComponent(name).path
             guard let data = fileManager.contents(atPath: path), let text = String(data: data, encoding: .utf8) else { continue }
-            let unresolved = PlaceholderReplacer.replace(in: text, with: variables).unresolved
+            let unresolved = reportableUnresolved(in: text, with: variables)
             if !unresolved.isEmpty { byScript[name] = unresolved }
         }
         return byScript
@@ -152,7 +194,9 @@ public enum ScriptEnvironment {
             if isScript(name), let data = fileManager.contents(atPath: source.path), let text = String(data: data, encoding: .utf8) {
                 let result = PlaceholderReplacer.replace(in: text, with: variables)
                 try Data(result.content.utf8).write(to: destination, options: .atomic)
-                if !result.unresolved.isEmpty { unresolvedByScript[name] = result.unresolved }
+                // Substitution is unchanged — only what gets reported narrows.
+                let reportable = result.unresolved.subtracting(shellOwnedNames(in: text))
+                if !reportable.isEmpty { unresolvedByScript[name] = reportable }
                 // Keep values non-world-readable during the build; force owner-exec
                 // since pkgbuild requires runnable scripts.
                 let sourcePermissions = ((try? fileManager.attributesOfItem(atPath: source.path))?[.posixPermissions] as? Int) ?? 0o700

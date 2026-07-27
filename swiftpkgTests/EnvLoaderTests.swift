@@ -121,3 +121,85 @@ struct ScriptEnvironmentTests {
         #expect(result == nil)
     }
 }
+
+struct ShellOwnedPlaceholderTests {
+
+    /// The shape that produced the false positive in production: a helper whose
+    /// parameters are shell locals expanded with `${...}` at install time.
+    private static let plistHelper = """
+    #!/bin/zsh
+    plist_set() {
+        local key="$1" type="$2" val="$3"
+        if $PB -c "Set :${key} ${val}" "$PLIST" 2>/dev/null; then
+            return 0
+        fi
+        $PB -c "Add :${key} ${type} ${val}" "$PLIST"
+    }
+    plist_set ApiUrl string ${REPORTMATE_API_URL}
+    """
+
+    @Test("a helper's shell locals are not reported as unresolved placeholders")
+    func shellLocalsAreNotPlaceholders() {
+        let unresolved = ScriptEnvironment.reportableUnresolved(
+            in: Self.plistHelper,
+            with: ["REPORTMATE_API_URL": "https://ecu.example"]
+        )
+        #expect(unresolved.isEmpty)
+    }
+
+    @Test("a genuinely missing build variable is still reported")
+    func missingBuildVariableStillWarns() {
+        let unresolved = ScriptEnvironment.reportableUnresolved(in: Self.plistHelper, with: [:])
+        #expect(unresolved == ["REPORTMATE_API_URL"])
+    }
+
+    @Test("recognises every form that introduces a shell name")
+    func recognisesDeclarationForms() {
+        let script = """
+        #!/bin/bash
+        plain=1
+        local scoped="x"
+        export -f exported=2
+        declare -i counted=3
+        readonly frozen=4
+        typeset typed=5
+        bare_local() { local declared; }
+        for item in a b c; do echo "${item}"; done
+        read -r answer
+        """
+        let owned = ScriptEnvironment.shellOwnedNames(in: script)
+        for name in ["plain", "scoped", "exported", "counted", "frozen", "typed", "declared", "item", "answer"] {
+            #expect(owned.contains(name), "expected \(name) to be recognised as shell-owned")
+        }
+    }
+
+    @Test("suppression is per-script, not global")
+    func suppressionIsPerScript() throws {
+        let temp = try TemporaryDirectory()
+        defer { temp.remove() }
+        let scripts = temp.url.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
+        try write("#!/bin/sh\nlocal token=1\necho ${token}\n", to: scripts.appendingPathComponent("preinstall"))
+        try write("#!/bin/sh\necho ${token}\n", to: scripts.appendingPathComponent("postinstall"))
+
+        let byScript = ScriptEnvironment.unresolvedPlaceholders(in: scripts, given: [:])
+        #expect(byScript["preinstall"] == nil)
+        #expect(byScript["postinstall"] == ["token"])
+    }
+
+    @Test("substitution is unaffected by the reporting filter")
+    func substitutionUnchanged() throws {
+        let temp = try TemporaryDirectory()
+        defer { temp.remove() }
+        let scripts = temp.url.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
+        try write("#!/bin/sh\nlocal key=1\necho ${key} ${SERVER}\n", to: scripts.appendingPathComponent("postinstall"))
+        let tempDir = temp.url.appendingPathComponent("tmp", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: false)
+
+        let processed = try #require(try ScriptEnvironment.process(scriptsDir: scripts, into: tempDir, with: ["SERVER": "https://ecu.example"]))
+        let content = try String(contentsOf: processed.directory.appendingPathComponent("postinstall"), encoding: .utf8)
+        #expect(content.contains("echo ${key} https://ecu.example"))
+        #expect(processed.unresolved.isEmpty)
+    }
+}
