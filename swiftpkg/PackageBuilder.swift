@@ -226,16 +226,24 @@ private struct NotarizationService: Sendable {
         return false
     }
 
+    /// Carries notarytool's own explanation through, the way every other
+    /// subprocess call does via `runSuccessfully`. Without it a missing keychain
+    /// profile — which notarytool names, along with the command that creates it —
+    /// surfaces only as "Notarization upload failed."
     private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
         let result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
-        guard result.status == 0 else { throw MunkiPkgError.processFailed(tool: "notarytool", message: failureMessage) }
+        guard result.status == 0 else {
+            throw MunkiPkgError.processFailed(tool: "notarytool", message: result.failureDetail(fallback: failureMessage))
+        }
         let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
             data = Data(result.stdoutString[result.stdoutString.index(after: newline)...].utf8)
         } else {
             data = result.stdout
         }
-        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { throw MunkiPkgError.message(failureMessage) }
+        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            throw MunkiPkgError.message(result.failureDetail(fallback: failureMessage))
+        }
         return plist
     }
 

@@ -43,12 +43,26 @@ public protocol ProcessControlling: Sendable {
     func cancel()
 }
 
+public extension ProcessResult {
+    /// The tool's own account of a failure, appended to `fallback`. Tools explain
+    /// themselves better than we can from the outside — notarytool, for one, names
+    /// the missing keychain profile and the command that creates it — so prefer
+    /// their words. stdout is a fallback for tools that report failures there;
+    /// when neither says anything, `fallback` stands alone.
+    func failureDetail(fallback: String) -> String {
+        let detail = [stderrString, stdoutString]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        guard let detail else { return fallback }
+        return "\(fallback) \(detail)"
+    }
+}
+
 public extension ProcessRunning {
     func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws {
         let result = try run(executable: executable, arguments: arguments)
         guard result.status == 0 else {
-            let details = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MunkiPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: details.isEmpty ? failureMessage : "\(failureMessage) \(details)")
+            throw MunkiPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: result.failureDetail(fallback: failureMessage))
         }
     }
 }
