@@ -37,7 +37,13 @@ parameters:
     default: 'dist'
   - name: swiftpkgVersion
     type: string
-    default: 'latest'
+    default: 'v0.3.1'
+  - name: swiftpkgSha256
+    type: string
+    default: ''
+  - name: expectedTeamId
+    type: string
+    default: 'DPXY7JLK67'
   - name: lint
     type: boolean
     default: false
@@ -64,26 +70,71 @@ steps:
       else
         api="https://api.github.com/repos/$repo/releases/tags/$SWIFTPKG_VERSION"
       fi
-      # The installer package name embeds the version, so resolve the asset URL
-      # from the release metadata rather than guessing the filename. Select the
-      # first match inside jq — piping to `head` under pipefail can SIGPIPE jq
-      # and fail the step when more than one asset matches.
-      url="$(curl -fsSL "$api" | jq -er 'first(.assets[] | select(.name | test("swiftpkg-.*-universal\\.pkg$")) | .browser_download_url)')" || url=""
+      # A release publishes swiftpkg-<version>-cli.pkg (the CLI alone),
+      # swiftpkg-<version>-combined.pkg (CLI + Swiftpkgr), and SHA256SUMS. CI
+      # wants the CLI. The name embeds the version, so resolve the asset URL from
+      # the release metadata rather than guessing the filename. Select the first
+      # match inside jq — piping to `head` under pipefail can SIGPIPE jq and fail
+      # the step when more than one asset matches.
+      release="$(curl -fsSL "$api")"
+      url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name | test("swiftpkg-.*-cli\\.pkg$")) | .browser_download_url)')" || url=""
       if [ -z "$url" ]; then
-        echo "##vso[task.logissue type=error]Could not find a swiftpkg Universal package asset for '$SWIFTPKG_VERSION'."
+        echo "##vso[task.logissue type=error]Could not find a swiftpkg CLI package asset for '$SWIFTPKG_VERSION'."
         exit 1
       fi
-      dest="$AGENT_TEMPDIRECTORY/swiftpkg-universal.pkg"
+      sums_url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name == "SHA256SUMS") | .browser_download_url)')" || sums_url=""
+      if [ -z "$sums_url" ]; then
+        echo "##vso[task.logissue type=error]Release '$SWIFTPKG_VERSION' publishes no SHA256SUMS."
+        exit 1
+      fi
+      asset="$(basename "$url")"
+      dest="$AGENT_TEMPDIRECTORY/$asset"
+      sums="$AGENT_TEMPDIRECTORY/SHA256SUMS"
       curl -fsSL --retry 3 --retry-delay 2 -o "$dest" "$url"
-      # Verify signature and notarization before running the installer as root.
-      # Pinning swiftpkgVersion to a release tag is recommended over 'latest'.
-      pkgutil --check-signature "$dest"
+      curl -fsSL --retry 3 --retry-delay 2 -o "$sums" "$sums_url"
+
+      # Three checks, each covering what the others cannot. Only the caller's own
+      # swiftpkgSha256 pins the bytes against a release asset being replaced in
+      # place; SHA256SUMS ships from the same release, so it catches a truncated
+      # or corrupted download but moves with the release; and the signature is
+      # what makes a substituted asset unusable, since forging it requires the
+      # publisher's Developer ID certificate.
+      actual="$(shasum -a 256 "$dest" | awk '{print $1}')"
+      if [ -n "$SWIFTPKG_SHA256" ] && [ "$actual" != "$SWIFTPKG_SHA256" ]; then
+        echo "##vso[task.logissue type=error]Installer SHA-256 does not match swiftpkgSha256: expected $SWIFTPKG_SHA256, got $actual"
+        exit 1
+      fi
+      published="$(awk -v name="$asset" '$2 == name { print $1 }' "$sums")"
+      if [ -z "$published" ]; then
+        echo "##vso[task.logissue type=error]SHA256SUMS has no entry for $asset."
+        exit 1
+      fi
+      if [ "$actual" != "$published" ]; then
+        echo "##vso[task.logissue type=error]Installer SHA-256 does not match SHA256SUMS: expected $published, got $actual"
+        exit 1
+      fi
+
+      # Assess before running the installer as root. spctl establishes that Apple
+      # notarized it; the Team ID establishes who signed it, which notarization
+      # alone does not.
+      signature="$(pkgutil --check-signature "$dest")"
+      printf '%s\n' "$signature"
+      case "$signature" in
+        *"($EXPECTED_TEAM_ID)"*) ;;
+        *)
+          echo "##vso[task.logissue type=error]Installer is not signed by Team ID $EXPECTED_TEAM_ID."
+          exit 1
+          ;;
+      esac
       spctl --assess --type install -vv "$dest"
+
       sudo installer -pkg "$dest" -target /
       swiftpkg --version
     displayName: 'Install swiftpkg'
     env:
       SWIFTPKG_VERSION: ${{ parameters.swiftpkgVersion }}
+      SWIFTPKG_SHA256: ${{ parameters.swiftpkgSha256 }}
+      EXPECTED_TEAM_ID: ${{ parameters.expectedTeamId }}
 
   - ${{ if eq(parameters.lint, true) }}:
       - bash: swiftpkg --lint "$PROJECT_PATH"

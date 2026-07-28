@@ -244,10 +244,17 @@ jobs:
 ```
 
 Inputs: `project-path` (required), `version` (→ `--pkg-version`), `output-dir`,
-`swiftpkg-version`, `lint`, `verify`, `provenance`, `extra-args`. Outputs:
-`pkg-path`, `version`, `sha256`. Requires a swiftpkg release that includes the
-CI flags (`--output-format`, `--output-dir`, `--pkg-version`, `--lint`,
-`--verify`, `--provenance`).
+`swiftpkg-version`, `swiftpkg-sha256`, `expected-team-id`, `lint`, `verify`,
+`provenance`, `extra-args`. Outputs: `pkg-path`, `version`, `sha256`. Requires a
+swiftpkg release that includes the CI flags (`--output-format`, `--output-dir`,
+`--pkg-version`, `--lint`, `--verify`, `--provenance`).
+
+The action installs a release package as root, so it checks what it downloaded
+first: the asset must match the release's `SHA256SUMS` and must be signed by the
+`expected-team-id` Developer Team, and `spctl` must accept it. `swiftpkg-version`
+defaults to a pinned tag rather than `latest`. GitHub release assets can be
+replaced without moving the tag, so a build that must be reproducible byte for
+byte should also set `swiftpkg-sha256` to the checksum it expects.
 
 ## Marketing site
 
