@@ -104,9 +104,11 @@ struct LinterTests {
         #expect(findings.contains { $0.severity == .error && $0.message.contains("neither a payload") })
     }
 
+    /// Payload-free, since a scripts-only project is supported: the script
+    /// findings must be warnings, with no "neither a payload" error alongside.
     @Test("warns on a non-executable script without a shebang")
     func warnsOnBadScript() throws {
-        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#)
+        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#, addPayload: false)
         defer { temp.remove() }
         let scripts = project.appendingPathComponent("scripts", isDirectory: true)
         try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
@@ -116,5 +118,17 @@ struct LinterTests {
         let findings = try Linter().lint(project: project, requestedFormat: nil)
         #expect(findings.contains { $0.message.contains("shebang") })
         #expect(findings.contains { $0.message.contains("not executable") })
+        #expect(findings.allSatisfy { $0.severity == .warning })
+    }
+
+    @Test("a scripts directory holding only .DS_Store does not count as scripts")
+    func emptyScriptsDirectoryStillErrors() throws {
+        let (temp, project) = try makeProject(buildInfo: #"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#, addPayload: false)
+        defer { temp.remove() }
+        let scripts = project.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
+        try write("", to: scripts.appendingPathComponent(".DS_Store"))
+        let findings = try Linter().lint(project: project, requestedFormat: nil)
+        #expect(findings.contains { $0.severity == .error && $0.message.contains("neither a payload") })
     }
 }
