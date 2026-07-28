@@ -86,6 +86,18 @@ struct PlaceholderReplacerTests {
         let result = PlaceholderReplacer.replace(in: "run ${X}", with: ["X": "$(whoami)"])
         #expect(result.content == "run $(whoami)")
     }
+
+    @Test("reports the names it replaced, not the ones it was offered")
+    func reportsSubstitutedNames() {
+        let result = PlaceholderReplacer.replace(in: "url=${SERVER}", with: ["SERVER": "x", "UNUSED": "y"])
+        #expect(result.substituted == ["SERVER"])
+    }
+
+    @Test("a script with no placeholders substitutes nothing")
+    func noPlaceholdersSubstitutesNothing() {
+        let result = PlaceholderReplacer.replace(in: "echo hello", with: ["SERVER": "x"])
+        #expect(result.substituted.isEmpty)
+    }
 }
 
 struct ScriptEnvironmentTests {
@@ -119,6 +131,42 @@ struct ScriptEnvironmentTests {
         try write("#!/bin/sh\n", to: scripts.appendingPathComponent("postinstall"))
         let result = try ScriptEnvironment.process(scriptsDir: scripts, into: temp.url, with: [:])
         #expect(result == nil)
+    }
+
+    @Test("accounts for what was substituted, per script and across the project")
+    func accountsForSubstitutions() throws {
+        let temp = try TemporaryDirectory()
+        defer { temp.remove() }
+        let scripts = temp.url.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
+        try write("#!/bin/sh\necho ${SERVER}\n", to: scripts.appendingPathComponent("preinstall"))
+        try write("#!/bin/sh\necho ${SERVER} ${ORG}\n", to: scripts.appendingPathComponent("postinstall"))
+        let tempDir = temp.url.appendingPathComponent("tmp", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: false)
+
+        let processed = try #require(try ScriptEnvironment.process(
+            scriptsDir: scripts,
+            into: tempDir,
+            with: ["SERVER": "https://ecu.example", "ORG": "ecuad", "UNUSED": "never referenced"]
+        ))
+        #expect(processed.substituted["preinstall"] == ["SERVER"])
+        #expect(processed.substituted["postinstall"] == ["SERVER", "ORG"])
+        #expect(processed.substitutedNames == ["SERVER", "ORG"]) // UNUSED is not counted
+    }
+
+    @Test("a variable no script references is not counted as applied")
+    func unreferencedVariableIsNotApplied() throws {
+        let temp = try TemporaryDirectory()
+        defer { temp.remove() }
+        let scripts = temp.url.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: false)
+        try write("#!/bin/sh\necho hello\n", to: scripts.appendingPathComponent("postinstall"))
+        let tempDir = temp.url.appendingPathComponent("tmp", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: false)
+
+        let processed = try #require(try ScriptEnvironment.process(scriptsDir: scripts, into: tempDir, with: ["SERVER": "x"]))
+        #expect(processed.substituted.isEmpty)
+        #expect(processed.substitutedNames.isEmpty)
     }
 }
 

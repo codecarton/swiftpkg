@@ -77,7 +77,15 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
                 console.warning("\(script): unresolved placeholder(s) \(keys.sorted().joined(separator: ", "))")
             }
         }
-        console.display("Applied \(variables.count) build variable(s) to install scripts")
+        // Report what the pass replaced, not what it loaded. A variable that no
+        // script references is the usual sign of a typo in either place, and a
+        // count of loaded variables hides it behind an encouraging number.
+        let applied = processed.substitutedNames
+        if applied.isEmpty {
+            console.display("Loaded \(variables.count) build variable(s); no install script referenced any of them")
+        } else {
+            console.display("Applied \(applied.count) of \(variables.count) build variable(s) to \(processed.substituted.count) install script(s)")
+        }
         return processed.directory
     }
 

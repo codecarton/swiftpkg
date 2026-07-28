@@ -78,6 +78,9 @@ public enum PlaceholderReplacer {
         public let content: String
         /// Placeholder names present in the script with no matching variable.
         public let unresolved: Set<String>
+        /// Placeholder names actually replaced. A variable that is loaded but
+        /// never referenced does not appear here.
+        public let substituted: Set<String>
     }
 
     private static let pattern = try! NSRegularExpression(pattern: #"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"#)
@@ -85,11 +88,12 @@ public enum PlaceholderReplacer {
     public static func replace(in content: String, with variables: [String: String]) -> Result {
         let ns = content as NSString
         let matches = pattern.matches(in: content, range: NSRange(location: 0, length: ns.length))
-        guard !matches.isEmpty else { return Result(content: content, unresolved: []) }
+        guard !matches.isEmpty else { return Result(content: content, unresolved: [], substituted: []) }
 
         let output = NSMutableString()
         var cursor = 0
         var unresolved: Set<String> = []
+        var substituted: Set<String> = []
         for match in matches {
             let range = match.range
             if range.location > cursor {
@@ -98,6 +102,7 @@ public enum PlaceholderReplacer {
             let key = ns.substring(with: match.range(at: 1))
             if let value = variables[key] {
                 output.append(value)
+                substituted.insert(key)
             } else {
                 output.append(ns.substring(with: range))
                 unresolved.insert(key)
@@ -107,7 +112,7 @@ public enum PlaceholderReplacer {
         if cursor < ns.length {
             output.append(ns.substring(with: NSRange(location: cursor, length: ns.length - cursor)))
         }
-        return Result(content: output as String, unresolved: unresolved)
+        return Result(content: output as String, unresolved: unresolved, substituted: substituted)
     }
 }
 
@@ -175,10 +180,24 @@ public enum ScriptEnvironment {
         return byScript
     }
 
+    /// What a substitution pass did to a project's scripts.
+    public struct Outcome: Sendable {
+        /// The directory of substituted copies, for pkgbuild to package.
+        public let directory: URL
+        /// Reportable unresolved placeholder names, keyed by script.
+        public let unresolved: [String: Set<String>]
+        /// Placeholder names actually replaced, keyed by script. Scripts where
+        /// nothing was replaced are absent.
+        public let substituted: [String: Set<String>]
+
+        /// Distinct variable names replaced across every script.
+        public var substitutedNames: Set<String> { substituted.values.reduce(into: []) { $0.formUnion($1) } }
+    }
+
     /// Copies scripts into `<tempDir>/env-scripts` (mode 0700), substituting
-    /// `${VAR}` placeholders. Returns the processed directory and any unresolved
-    /// placeholders, or nil when there is nothing to substitute.
-    public static func process(scriptsDir: URL, into tempDir: URL, with variables: [String: String], fileManager: FileManager = .default) throws -> (directory: URL, unresolved: [String: Set<String>])? {
+    /// `${VAR}` placeholders. Returns what the pass replaced and left unresolved,
+    /// or nil when there is nothing to substitute.
+    public static func process(scriptsDir: URL, into tempDir: URL, with variables: [String: String], fileManager: FileManager = .default) throws -> Outcome? {
         guard !variables.isEmpty else { return nil }
         let contents = (try? fileManager.contentsOfDirectory(atPath: scriptsDir.path))?.filter { $0 != ".DS_Store" } ?? []
         guard !contents.isEmpty else { return nil }
@@ -188,12 +207,14 @@ public enum ScriptEnvironment {
         try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempDir.path)
 
         var unresolvedByScript: [String: Set<String>] = [:]
+        var substitutedByScript: [String: Set<String>] = [:]
         for name in contents {
             let source = scriptsDir.appendingPathComponent(name)
             let destination = processedDir.appendingPathComponent(name)
             if isScript(name), let data = fileManager.contents(atPath: source.path), let text = String(data: data, encoding: .utf8) {
                 let result = PlaceholderReplacer.replace(in: text, with: variables)
                 try Data(result.content.utf8).write(to: destination, options: .atomic)
+                if !result.substituted.isEmpty { substitutedByScript[name] = result.substituted }
                 // Substitution is unchanged — only what gets reported narrows.
                 let reportable = result.unresolved.subtracting(shellOwnedNames(in: text))
                 if !reportable.isEmpty { unresolvedByScript[name] = reportable }
@@ -205,6 +226,6 @@ public enum ScriptEnvironment {
                 try fileManager.copyItem(at: source, to: destination)
             }
         }
-        return (processedDir, unresolvedByScript)
+        return Outcome(directory: processedDir, unresolved: unresolvedByScript, substituted: substitutedByScript)
     }
 }
