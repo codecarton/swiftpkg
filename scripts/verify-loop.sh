@@ -58,6 +58,15 @@ run "$BIN" "$EMPTY"
 run /usr/sbin/pkgutil --expand "$EMPTY/build/EmptyPayload-1.0.pkg" "$WORK/expanded-empty"
 test -e "$WORK/expanded-empty/Payload"
 
+RECEIPT="$WORK/ReceiptOnly"
+run "$BIN" --create "$RECEIPT"
+rm -rf "$RECEIPT/payload" "$RECEIPT/scripts"
+run "$BIN" "$RECEIPT"
+run /usr/sbin/pkgutil --expand "$RECEIPT/build/ReceiptOnly-1.0.pkg" "$WORK/expanded-receipt"
+test ! -e "$WORK/expanded-receipt/Payload"
+test ! -e "$WORK/expanded-receipt/Scripts"
+printf 'receipt-only package OK\n'
+
 for format in json yaml; do
     PROJECT_FORMAT="$WORK/Format-$format"
     if [ "$format" = json ]; then
@@ -108,6 +117,25 @@ if manifest["sha256"] != digest:
     fail(f'sha256 mismatch: {manifest["sha256"]} != {digest}')
 print("manifest OK")
 PY
+
+OVERRIDE="$WORK/Override"
+run "$BIN" --create "$OVERRIDE"
+mkdir -p "$OVERRIDE/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$OVERRIDE/payload/usr/local/bin/tool"
+run "$BIN" --pkg-version 3.1.4 --output-dir "$WORK/artifacts" "$OVERRIDE"
+test -f "$WORK/artifacts/Override-3.1.4.pkg"
+test ! -e "$OVERRIDE/build/Override-3.1.4.pkg"
+
+DYNAMIC="$WORK/Dynamic"
+run "$BIN" --create --json "$DYNAMIC"
+printf '%s\n' '{' '  "name": "Dyn-${version}.pkg",' '  "identifier": "com.example.dynamic",' '  "version": "${DATE}"' '}' > "$DYNAMIC/build-info.json"
+printf '%s\n' 'dyn' > "$DYNAMIC/payload/marker.txt"
+run "$BIN" "$DYNAMIC"
+DYN_PKG=$(ls "$DYNAMIC/build/")
+case "$DYN_PKG" in
+    Dyn-[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].pkg) printf 'dynamic version OK: %s\n' "$DYN_PKG" ;;
+    *) printf 'unexpected dynamic package name: %s\n' "$DYN_PKG" >&2; exit 1 ;;
+esac
 
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"

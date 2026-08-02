@@ -66,7 +66,7 @@ public struct PackageSettingsDraft: Equatable, Sendable {
             notarizationTeamID = ""
             notarizationPassword = ""
             notarizationKeychainProfile = profile
-        case nil:
+        case nil, .invalid?:
             notarizationMode = .none
             notarizationAppleID = ""
             notarizationTeamID = ""

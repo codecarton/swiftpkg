@@ -21,11 +21,12 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
 
     @discardableResult
     public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws -> BuildResult {
-        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat)
+        let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat, versionOverride: configuration.versionOverride)
+        try Self.validatePackageName(packageConfiguration.name)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
             console.warning("build-info ownership: \(packageConfiguration.ownership.rawValue) might require using sudo to build this package.")
         }
-        let layout = try PackageProjectLayout(project: project, fileManager: fileManager)
+        let layout = try PackageProjectLayout(project: project, fileManager: fileManager, outputDirectory: configuration.outputDirectory)
         try layout.createBuildDirectoryIfNeeded()
         let output = layout.buildDirectory.appendingPathComponent(packageConfiguration.name)
         let notarization = Box(NotarizationService.Outcome(accepted: false, stapled: false))
@@ -67,6 +68,25 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         }
         return URL(fileURLWithPath: String(path))
     }
+
+    /// Rejects a package `name` that could escape the build directory.
+    ///
+    /// The output package path is `build/<name>` (and `build/Dist-<name>` for
+    /// distribution builds), so a `name` containing a path separator or `..`
+    /// would write the artifact outside `build/`. Require a single, safe path
+    /// component. Called with the post-`${version}`-substitution name.
+    static func validatePackageName(_ name: String) throws {
+        guard !name.isEmpty,
+              name != ".", name != "..",
+              !name.contains("/"),
+              !name.contains("\0"),
+              URL(fileURLWithPath: name).lastPathComponent == name
+        else {
+            throw MunkiPkgError.invalidConfiguration(
+                "Package name \"\(name)\" must be a single path component (no \"/\" or \"..\")."
+            )
+        }
+    }
 }
 
 /// Describes the files and directories involved in one package build.
@@ -77,7 +97,7 @@ private struct PackageProjectLayout {
     let buildDirectory: URL
     let fileManager: FileManager
 
-    init(project: URL, fileManager: FileManager) throws {
+    init(project: URL, fileManager: FileManager, outputDirectory: URL? = nil) throws {
         self.project = project
         self.fileManager = fileManager
         let payloadURL = project.appendingPathComponent("payload", isDirectory: true)
@@ -86,12 +106,15 @@ private struct PackageProjectLayout {
         if fileManager.directoryExists(at: scriptsURL), try !fileManager.contents(at: scriptsURL).filter({ $0 != ".DS_Store" }).isEmpty {
             scripts = scriptsURL
         } else { scripts = nil }
-        guard payload != nil || scripts != nil else { throw MunkiPkgError.message("\(project.path) does not contain a payload folder or a scripts folder.") }
-        buildDirectory = project.appendingPathComponent("build", isDirectory: true)
+        // A project with neither payload nor scripts is valid: it builds a
+        // receipt-only package (pkgbuild --nopayload) that installs no files but
+        // records a receipt, which Munki conditions can key off. munki-pkg
+        // allows this, so swiftpkg does too.
+        buildDirectory = outputDirectory ?? project.appendingPathComponent("build", isDirectory: true)
     }
 
     func createBuildDirectoryIfNeeded() throws {
-        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: false) }
+        if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: true) }
         else if !fileManager.directoryExists(at: buildDirectory) { throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.") }
     }
 
@@ -213,7 +236,7 @@ private struct DistributionPackageBuilder {
 }
 
 /// Uploads a package to Apple notarization and optionally staples it.
-private struct NotarizationService: Sendable {
+struct NotarizationService: Sendable {
     let runner: any ProcessRunning
     let console: Console
 
@@ -229,9 +252,12 @@ private struct NotarizationService: Sendable {
     /// reported independently so the build manifest reflects what actually
     /// happened rather than what was merely requested.
     func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws -> Outcome {
+        if case let .invalid(reason) = configuration.authentication {
+            throw MunkiPkgError.invalidConfiguration(reason)
+        }
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
-        guard let identifier = submission["id"] as? String else { throw MunkiPkgError.message("Unexpected output from notarytool") }
+        guard let identifier = submission["id"] as? String else { throw MunkiPkgError.notarizationFailed("Unexpected output from notarytool") }
         console.display("id \(identifier)", toolName: "notarytool")
         if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
         let accepted = try await waitForAcceptance(identifier, configuration: configuration)
@@ -252,23 +278,33 @@ private struct NotarizationService: Sendable {
             let status = output["status"] as? String ?? "Unknown"
             let message = output["message"] as? String ?? ""
             if status == "Accepted" { console.display("Notarization successful. \(message)"); return true }
-            if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.message("Notarization failed (\(status)): \(message)") }
+            if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.notarizationFailed("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        console.warning("Timeout EXCEEDED when waiting for the notarization to complete. You can manually staple the package later if notarization is successful.")
-        return false
+        throw MunkiPkgError.notarizationFailed("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
     }
 
     private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
-        let result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
-        guard result.status == 0 else { throw MunkiPkgError.processFailed(tool: "notarytool", message: failureMessage) }
+        let result: ProcessResult
+        do {
+            result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
+        } catch {
+            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+        }
+        guard result.status == 0 else { throw MunkiPkgError.notarizationFailed("notarytool: \(failureMessage)") }
         let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
             data = Data(result.stdoutString[result.stdoutString.index(after: newline)...].utf8)
         } else {
             data = result.stdout
         }
-        guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { throw MunkiPkgError.message(failureMessage) }
+        let object: Any
+        do {
+            object = try PropertyListSerialization.propertyList(from: data, format: nil)
+        } catch {
+            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+        }
+        guard let plist = object as? [String: Any] else { throw MunkiPkgError.notarizationFailed(failureMessage) }
         return plist
     }
 
@@ -276,6 +312,7 @@ private struct NotarizationService: Sendable {
         switch configuration.authentication {
         case let .appleID(appleID, teamID, password): return ["--apple-id", appleID, "--team-id", teamID, "--password", password]
         case let .keychainProfile(profile): return ["--keychain-profile", profile]
+        case .invalid: return []  // notarize(package:...) rejects .invalid before reaching here
         }
     }
 }
@@ -283,7 +320,16 @@ private struct NotarizationService: Sendable {
 private func appendSigningArguments(_ arguments: inout [String], signing: SigningConfiguration?) {
     guard let signing else { return }
     arguments += ["--sign", signing.identity]
-    if let keychain = signing.keychain { arguments += ["--keychain", keychain] }
+    if let keychain = signing.keychain { arguments += ["--keychain", expandKeychainPath(keychain)] }
     for certificate in signing.additionalCertificateNames { arguments += ["--cert", certificate] }
     if let usesTimestamp = signing.usesTimestamp { arguments.append(usesTimestamp ? "--timestamp" : "--timestamp=none") }
+}
+
+/// Expands `${HOME}` and a leading tilde in a build-info keychain path so that
+/// projects written as `${HOME}/Library/Keychains/signing.keychain` resolve to a
+/// real path before being handed to `productbuild`/`productsign`. Mirrors the
+/// original munki-pkg, whose build-info files rely on this expansion.
+func expandKeychainPath(_ path: String) -> String {
+    let withHome = path.replacingOccurrences(of: "${HOME}", with: NSHomeDirectory())
+    return NSString(string: withHome).expandingTildeInPath
 }

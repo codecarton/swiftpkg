@@ -16,14 +16,14 @@ public enum SwiftPkg {
             return 0
         case .failure(let message):
             FileHandle.standardError.write(Data(("ERROR: \(message)\n").utf8))
-            return 255
+            return usageErrorExitCode
         case .options(let options):
             let command: CLICommand?
             do {
                 command = try CLICommand.resolve(from: options)
             } catch {
                 consoleError(String(describing: error))
-                return 255
+                return exitCode(for: error)
             }
             guard let command else {
                 print(CLIParser.usage)
@@ -67,7 +67,7 @@ public enum SwiftPkg {
                 return 0
             } catch {
                 console.error(String(describing: error))
-                return 255
+                return exitCode(for: error)
             }
         }
     }

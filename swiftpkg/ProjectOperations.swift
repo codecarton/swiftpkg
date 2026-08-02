@@ -18,14 +18,14 @@ public struct ProjectCreator {
         configuration: PackageConfiguration? = nil
     ) throws {
         if fileManager.itemExists(at: project), !force {
-            throw MunkiPkgError.message("\(project.path) already exists! Use --force to convert it to a project directory.")
+            throw MunkiPkgError.projectExists("\(project.path) already exists! Use --force to convert it to a project directory.")
         }
         if !fileManager.itemExists(at: project) {
             try fileManager.createDirectory(at: project, withIntermediateDirectories: false)
         }
         for directoryName in ["payload", "scripts", "build"] {
             let directory = project.appendingPathComponent(directoryName, isDirectory: true)
-            guard !fileManager.itemExists(at: directory) else { throw MunkiPkgError.message("\(directory.path) already exists") }
+            guard !fileManager.itemExists(at: directory) else { throw MunkiPkgError.projectExists("\(directory.path) already exists") }
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
         }
         try BuildInfoStore.write(configuration ?? .defaults(for: project), to: project, format: format)
