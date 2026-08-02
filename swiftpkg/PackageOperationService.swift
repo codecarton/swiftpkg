@@ -35,11 +35,12 @@ public actor PackageOperationService {
             .importPackage(at: package, to: project, format: format)
     }
 
+    @discardableResult
     public func buildPackage(
         in project: URL,
         options: PackageBuildOptions,
         reporter: (@Sendable (ConsoleEvent) -> Void)? = nil
-    ) async throws {
+    ) async throws -> BuildResult {
         try await PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console(reporter: reporter))
             .buildPackage(in: project, configuration: options)
     }

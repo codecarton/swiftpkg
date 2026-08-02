@@ -1,0 +1,185 @@
+# Azure DevOps steps template that builds an Apple installer package from a
+# swiftpkg project directory — the ADO equivalent of this repo's GitHub
+# composite action (action.yml). It installs the swiftpkg release package,
+# optionally lints, builds with --output-format json, and exposes the result
+# as output variables on the 'build' step.
+#
+# Usage from a pipeline in another repo. Reference swiftpkg as a repository
+# resource, then include this template:
+#
+#   resources:
+#     repositories:
+#       - repository: swiftpkg
+#         type: github
+#         name: codecarton/swiftpkg
+#         endpoint: <your GitHub service connection>
+#
+#   steps:
+#     - template: azure-pipelines/swiftpkg-build.yml@swiftpkg
+#       parameters:
+#         projectPath: packages/my-package-project
+#         version: $(Build.SourceBranchName)
+#         lint: true
+#
+# Outputs (from the step named 'build'):
+#   $(build.pkgPath)  $(build.version)  $(build.sha256)
+#
+# Must run on a macOS agent (pool: { vmImage: 'macOS-latest' }).
+
+parameters:
+  - name: projectPath
+    type: string
+  - name: version
+    type: string
+    default: ''
+  - name: outputDir
+    type: string
+    default: 'dist'
+  - name: swiftpkgVersion
+    type: string
+    default: 'v0.3.1'
+  - name: swiftpkgSha256
+    type: string
+    default: ''
+  - name: expectedTeamId
+    type: string
+    default: 'DPXY7JLK67'
+  - name: lint
+    type: boolean
+    default: false
+  - name: verify
+    type: boolean
+    default: false
+  - name: provenance
+    type: boolean
+    default: false
+  - name: extraArgs
+    type: string
+    default: ''
+
+steps:
+  - bash: |
+      set -euo pipefail
+      if ! command -v jq >/dev/null 2>&1; then
+        echo "##vso[task.logissue type=error]jq is required but was not found. Install it (e.g. 'brew install jq')."
+        exit 1
+      fi
+      repo="codecarton/swiftpkg"
+      if [ "$SWIFTPKG_VERSION" = "latest" ]; then
+        api="https://api.github.com/repos/$repo/releases/latest"
+      else
+        api="https://api.github.com/repos/$repo/releases/tags/$SWIFTPKG_VERSION"
+      fi
+      # A release publishes swiftpkg-<version>-cli.pkg (the CLI alone),
+      # swiftpkg-<version>-combined.pkg (CLI + Swiftpkgr), and SHA256SUMS. CI
+      # wants the CLI. The name embeds the version, so resolve the asset URL from
+      # the release metadata rather than guessing the filename. Select the first
+      # match inside jq — piping to `head` under pipefail can SIGPIPE jq and fail
+      # the step when more than one asset matches.
+      release="$(curl -fsSL "$api")"
+      url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name | test("swiftpkg-.*-cli\\.pkg$")) | .browser_download_url)')" || url=""
+      if [ -z "$url" ]; then
+        echo "##vso[task.logissue type=error]Could not find a swiftpkg CLI package asset for '$SWIFTPKG_VERSION'."
+        exit 1
+      fi
+      sums_url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name == "SHA256SUMS") | .browser_download_url)')" || sums_url=""
+      if [ -z "$sums_url" ]; then
+        echo "##vso[task.logissue type=error]Release '$SWIFTPKG_VERSION' publishes no SHA256SUMS."
+        exit 1
+      fi
+      asset="$(basename "$url")"
+      dest="$AGENT_TEMPDIRECTORY/$asset"
+      sums="$AGENT_TEMPDIRECTORY/SHA256SUMS"
+      curl -fsSL --retry 3 --retry-delay 2 -o "$dest" "$url"
+      curl -fsSL --retry 3 --retry-delay 2 -o "$sums" "$sums_url"
+
+      # Three checks, each covering what the others cannot. Only the caller's own
+      # swiftpkgSha256 pins the bytes against a release asset being replaced in
+      # place; SHA256SUMS ships from the same release, so it catches a truncated
+      # or corrupted download but moves with the release; and the signature is
+      # what makes a substituted asset unusable, since forging it requires the
+      # publisher's Developer ID certificate.
+      actual="$(shasum -a 256 "$dest" | awk '{print $1}')"
+      if [ -n "$SWIFTPKG_SHA256" ] && [ "$actual" != "$SWIFTPKG_SHA256" ]; then
+        echo "##vso[task.logissue type=error]Installer SHA-256 does not match swiftpkgSha256: expected $SWIFTPKG_SHA256, got $actual"
+        exit 1
+      fi
+      published="$(awk -v name="$asset" '$2 == name { print $1 }' "$sums")"
+      if [ -z "$published" ]; then
+        echo "##vso[task.logissue type=error]SHA256SUMS has no entry for $asset."
+        exit 1
+      fi
+      if [ "$actual" != "$published" ]; then
+        echo "##vso[task.logissue type=error]Installer SHA-256 does not match SHA256SUMS: expected $published, got $actual"
+        exit 1
+      fi
+
+      # Assess before running the installer as root. spctl establishes that Apple
+      # notarized it; the Team ID establishes who signed it, which notarization
+      # alone does not.
+      signature="$(pkgutil --check-signature "$dest")"
+      printf '%s\n' "$signature"
+      case "$signature" in
+        *"($EXPECTED_TEAM_ID)"*) ;;
+        *)
+          echo "##vso[task.logissue type=error]Installer is not signed by Team ID $EXPECTED_TEAM_ID."
+          exit 1
+          ;;
+      esac
+      spctl --assess --type install -vv "$dest"
+
+      sudo installer -pkg "$dest" -target /
+      swiftpkg --version
+    displayName: 'Install swiftpkg'
+    env:
+      SWIFTPKG_VERSION: ${{ parameters.swiftpkgVersion }}
+      SWIFTPKG_SHA256: ${{ parameters.swiftpkgSha256 }}
+      EXPECTED_TEAM_ID: ${{ parameters.expectedTeamId }}
+
+  - ${{ if eq(parameters.lint, true) }}:
+      - bash: swiftpkg --lint "$PROJECT_PATH"
+        displayName: 'Lint package project'
+        env:
+          PROJECT_PATH: ${{ parameters.projectPath }}
+
+  - bash: |
+      set -euo pipefail
+      # extra-args first so the template's required flags always win and can't be
+      # overridden into a shape that breaks jq parsing.
+      args=()
+      if [ -n "$EXTRA_ARGS" ]; then
+        read -ra extra <<< "$EXTRA_ARGS"
+        args+=("${extra[@]}")
+      fi
+      args+=(--output-format json --output-dir "$OUTPUT_DIR")
+      if [ -n "$PKG_VERSION" ]; then
+        args+=(--pkg-version "$PKG_VERSION")
+      fi
+      # Azure renders booleans as True/False; accept any case.
+      if [ "$(echo "$DO_VERIFY" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+        args+=(--verify)
+      fi
+      if [ "$(echo "$DO_PROVENANCE" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+        args+=(--provenance)
+      fi
+      result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
+      echo "$result"
+      # Extract with `jq -er` so a null/missing field fails the step rather than
+      # silently publishing an empty output variable, and strip any CR/LF so the
+      # value can't inject a second Azure logging command.
+      emit() { printf '%s' "$1" | tr -d '\r\n'; }
+      pkg_path="$(printf '%s' "$result" | jq -er '.pkg_path')"
+      version="$(printf '%s' "$result" | jq -er '.version')"
+      sha256="$(printf '%s' "$result" | jq -er '.sha256')"
+      echo "##vso[task.setvariable variable=pkgPath;isOutput=true]$(emit "$pkg_path")"
+      echo "##vso[task.setvariable variable=version;isOutput=true]$(emit "$version")"
+      echo "##vso[task.setvariable variable=sha256;isOutput=true]$(emit "$sha256")"
+    name: build
+    displayName: 'Build package'
+    env:
+      PROJECT_PATH: ${{ parameters.projectPath }}
+      PKG_VERSION: ${{ parameters.version }}
+      OUTPUT_DIR: ${{ parameters.outputDir }}
+      DO_VERIFY: ${{ parameters.verify }}
+      DO_PROVENANCE: ${{ parameters.provenance }}
+      EXTRA_ARGS: ${{ parameters.extraArgs }}
