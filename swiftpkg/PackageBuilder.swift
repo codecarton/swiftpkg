@@ -54,6 +54,13 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
             try PackageVerifier(runner: runner, console: console)
                 .verify(package: output, expectedIdentifier: packageConfiguration.identifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
         }
+        if configuration.writesProvenance {
+            let provenance = try ProvenanceBuilder(runner: runner, fileManager: fileManager)
+                .build(configuration: packageConfiguration, output: output, project: project)
+            let sidecar = URL(fileURLWithPath: output.path + ".provenance.json")
+            try Data(provenance.jsonString().utf8).write(to: sidecar, options: .atomic)
+            console.display("Wrote provenance to \(sidecar.path)")
+        }
         return BuildResult(
             name: packageConfiguration.name,
             version: packageConfiguration.version,
