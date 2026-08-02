@@ -29,7 +29,7 @@ struct SystemProcessRunnerTests {
 
     @Test("reports a structured error when the executable cannot launch")
     func reportsLaunchFailure() {
-        #expect(throws: MunkiPkgError.self) {
+        #expect(throws: SwiftPkgError.self) {
             try SystemProcessRunner().run(executable: "/nonexistent/tool/swiftpkg-should-not-exist", arguments: [])
         }
     }

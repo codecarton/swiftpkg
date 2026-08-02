@@ -136,7 +136,7 @@ public enum CLICommand {
 
     private static func requestedFormat(from options: CLIOptions) throws -> BuildInfoFormat? {
         guard !(options.json && options.yaml) else {
-            throw MunkiPkgError.invalidConfiguration("Only a single build-info file can be built at a time!")
+            throw SwiftPkgError.invalidConfiguration("Only a single build-info file can be built at a time!")
         }
         if options.json { return .json }
         if options.yaml { return .yaml }

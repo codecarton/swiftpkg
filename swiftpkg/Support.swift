@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-public enum MunkiPkgError: Error, CustomStringConvertible, LocalizedError {
+public enum SwiftPkgError: Error, CustomStringConvertible, LocalizedError {
     case message(String)
     case invalidConfiguration(String)
     case processFailed(tool: String, message: String)
@@ -43,7 +43,7 @@ public let usageErrorExitCode: Int32 = 64
 
 /// Maps any thrown error to a process exit code, defaulting unknown errors to 1.
 public func exitCode(for error: any Error) -> Int32 {
-    (error as? MunkiPkgError)?.exitCode ?? 1
+    (error as? SwiftPkgError)?.exitCode ?? 1
 }
 
 public struct ProcessResult: Equatable, Sendable {
@@ -92,7 +92,7 @@ public extension ProcessRunning {
     func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws {
         let result = try run(executable: executable, arguments: arguments)
         guard result.status == 0 else {
-            throw MunkiPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: result.failureDetail(fallback: failureMessage))
+            throw SwiftPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: result.failureDetail(fallback: failureMessage))
         }
     }
 }
@@ -120,7 +120,7 @@ public final class SystemProcessRunner: ProcessRunning, ProcessControlling, @unc
         do {
             try process.run()
         } catch {
-            throw MunkiPkgError.message("\(URL(fileURLWithPath: executable).lastPathComponent) execution failed: \(error.localizedDescription)")
+            throw SwiftPkgError.message("\(URL(fileURLWithPath: executable).lastPathComponent) execution failed: \(error.localizedDescription)")
         }
 
         // Drain stdout and stderr concurrently on background queues *before*

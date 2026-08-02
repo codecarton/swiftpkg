@@ -159,7 +159,7 @@ public struct PackageConfiguration: Sendable {
 
     /// Returns a copy with `${version}` substituted in user-facing name fields.
     /// The resolved package name is normalized to end in `.pkg`: build-info may
-    /// set `name` without the extension (e.g. `MunkiBootstrap`), and munki-pkg
+    /// set `name` without the extension (e.g. `SwiftpkgBootstrap`), and munki-pkg
     /// writes the artifact as `<name>.pkg`, so swiftpkg does too — otherwise the
     /// output is extensionless and `find '*.pkg'`/munkiimport miss it.
     public func substitutingVersion() -> PackageConfiguration {
@@ -198,38 +198,38 @@ public struct PackageConfiguration: Sendable {
 
     private static func stringValue(for key: String, in values: [String: Any]) throws -> String? {
         guard let value = values[key] else { return nil }
-        guard let string = scalarString(value) else { throw MunkiPkgError.invalidConfiguration("build-info key '\(key)' must be a string") }
+        guard let string = scalarString(value) else { throw SwiftPkgError.invalidConfiguration("build-info key '\(key)' must be a string") }
         return string
     }
 
     private static func boolValue(for key: String, in values: [String: Any]) throws -> Bool? {
         guard let value = values[key] else { return nil }
-        guard let bool = value as? Bool else { throw MunkiPkgError.invalidConfiguration("build-info key '\(key)' must be a Boolean") }
+        guard let bool = value as? Bool else { throw SwiftPkgError.invalidConfiguration("build-info key '\(key)' must be a Boolean") }
         return bool
     }
 
     private static func enumValue<T: RawRepresentable>(_ type: T.Type, key: String, values: [String: Any]) throws -> T? where T.RawValue == String {
         guard let string = try stringValue(for: key, in: values) else { return nil }
-        guard let value = T(rawValue: string) else { throw MunkiPkgError.invalidConfiguration("build-info key '\(key)' has illegal value: \(string)") }
+        guard let value = T(rawValue: string) else { throw SwiftPkgError.invalidConfiguration("build-info key '\(key)' has illegal value: \(string)") }
         return value
     }
 
     private static func signingConfiguration(in values: [String: Any]) throws -> SigningConfiguration? {
         guard let value = values["signing_info"] else { return nil }
         guard let signing = value as? [String: Any], let identity = signing["identity"] as? String else {
-            throw MunkiPkgError.invalidConfiguration("signing_info must contain a string identity")
+            throw SwiftPkgError.invalidConfiguration("signing_info must contain a string identity")
         }
         let certificates: [String]
         if let certificate = signing["additional_cert_names"] as? String { certificates = [certificate] }
         else if let values = signing["additional_cert_names"] as? [String] { certificates = values }
         else if signing["additional_cert_names"] == nil { certificates = [] }
-        else { throw MunkiPkgError.invalidConfiguration("signing_info additional_cert_names must be a string or string array") }
+        else { throw SwiftPkgError.invalidConfiguration("signing_info additional_cert_names must be a string or string array") }
         return SigningConfiguration(identity: identity, keychain: signing["keychain"] as? String, additionalCertificateNames: certificates, usesTimestamp: signing["timestamp"] as? Bool)
     }
 
     private static func notarizationConfiguration(in values: [String: Any]) throws -> NotarizationConfiguration? {
         guard let value = values["notarization_info"] else { return nil }
-        guard let notary = value as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("notarization_info must be a dictionary") }
+        guard let notary = value as? [String: Any] else { throw SwiftPkgError.invalidConfiguration("notarization_info must be a dictionary") }
         let authentication: NotarizationConfiguration.Authentication
         if let appleID = notary["apple_id"] as? String, let teamID = notary["team_id"] as? String {
             let password = notary["password"] as? String ?? ""
@@ -295,8 +295,8 @@ public enum BuildInfoStore {
             case .json: object = try JSONSerialization.jsonObject(with: data)
             case .yaml, .yml: object = try Yams.load(yaml: String(decoding: data, as: UTF8.self)) as Any
             }
-        } catch { throw MunkiPkgError.invalidConfiguration("\(url.path) is not a valid \(format.rawValue) file: \(error.localizedDescription)") }
-        guard let values = object as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("\(url.path) must contain a dictionary") }
+        } catch { throw SwiftPkgError.invalidConfiguration("\(url.path) is not a valid \(format.rawValue) file: \(error.localizedDescription)") }
+        guard let values = object as? [String: Any] else { throw SwiftPkgError.invalidConfiguration("\(url.path) must contain a dictionary") }
         return try PackageConfiguration(values: values, defaults: .defaults(for: project))
     }
 
@@ -318,19 +318,19 @@ public enum BuildInfoStore {
     public static func discover(in project: URL, requestedFormat: BuildInfoFormat? = nil, fileManager: FileManager = .default) throws -> BuildInfoDocument {
         if let requestedFormat {
             let url = project.appendingPathComponent("build-info").appendingPathExtension(requestedFormat.rawValue)
-            guard fileManager.itemExists(at: url) else { throw MunkiPkgError.invalidConfiguration("No build-info file found!") }
+            guard fileManager.itemExists(at: url) else { throw SwiftPkgError.invalidConfiguration("No build-info file found!") }
             return BuildInfoDocument(url: url, format: requestedFormat)
         }
         let baseURL = project.appendingPathComponent("build-info")
         let formats = BuildInfoFormat.allCases.filter { fileManager.itemExists(at: baseURL.appendingPathExtension($0.rawValue)) }
-        guard formats.count <= 1 else { throw MunkiPkgError.invalidConfiguration("Multiple build-info files found!") }
-        guard let format = formats.first else { throw MunkiPkgError.invalidConfiguration("No build-info file found!") }
+        guard formats.count <= 1 else { throw SwiftPkgError.invalidConfiguration("Multiple build-info files found!") }
+        guard let format = formats.first else { throw SwiftPkgError.invalidConfiguration("No build-info file found!") }
         return BuildInfoDocument(url: baseURL.appendingPathExtension(format.rawValue), format: format)
     }
 
     private static func format(for url: URL) throws -> BuildInfoFormat {
         guard let format = BuildInfoFormat(rawValue: url.pathExtension.lowercased()) else {
-            throw MunkiPkgError.invalidConfiguration("Unsupported build-info format: \(url.pathExtension)")
+            throw SwiftPkgError.invalidConfiguration("Unsupported build-info format: \(url.pathExtension)")
         }
         return format
     }

@@ -14,8 +14,8 @@ struct PackageNameExtensionTests {
 
     @Test("a name without .pkg gains the extension")
     func appendsExtension() throws {
-        let resolved = try config(name: "MunkiBootstrap").substitutingVersion()
-        #expect(resolved.name == "MunkiBootstrap.pkg")
+        let resolved = try config(name: "SwiftpkgBootstrap").substitutingVersion()
+        #expect(resolved.name == "SwiftpkgBootstrap.pkg")
     }
 
     @Test("a name already ending in .pkg is left unchanged")
