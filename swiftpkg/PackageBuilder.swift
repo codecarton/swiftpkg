@@ -357,6 +357,10 @@ struct NotarizationService: Sendable {
         throw MunkiPkgError.notarizationFailed("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
     }
 
+    /// Carries notarytool's own explanation through, the way every other
+    /// subprocess call does via `runSuccessfully`. Without it a missing keychain
+    /// profile — which notarytool names, along with the command that creates it —
+    /// surfaces only as "Notarization upload failed."
     private func plistOutput(for arguments: [String], failureMessage: String) throws -> [String: Any] {
         let result: ProcessResult
         do {
@@ -364,7 +368,9 @@ struct NotarizationService: Sendable {
         } catch {
             throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
         }
-        guard result.status == 0 else { throw MunkiPkgError.notarizationFailed("notarytool: \(failureMessage)") }
+        guard result.status == 0 else {
+            throw MunkiPkgError.notarizationFailed("notarytool: \(result.failureDetail(fallback: failureMessage))")
+        }
         let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
             data = Data(result.stdoutString[result.stdoutString.index(after: newline)...].utf8)
