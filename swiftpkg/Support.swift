@@ -5,15 +5,45 @@ public enum MunkiPkgError: Error, CustomStringConvertible, LocalizedError {
     case message(String)
     case invalidConfiguration(String)
     case processFailed(tool: String, message: String)
+    case projectExists(String)
+    case importFailed(String)
+    case notarizationFailed(String)
 
     public var description: String {
         switch self {
-        case let .message(value), let .invalidConfiguration(value): value
+        case let .message(value),
+             let .invalidConfiguration(value),
+             let .projectExists(value),
+             let .importFailed(value),
+             let .notarizationFailed(value):
+            value
         case let .processFailed(tool, message): "\(tool): \(message)"
         }
     }
 
     public var errorDescription: String? { description }
+
+    /// Process exit code for this error class. `0` is reserved for success and
+    /// `64` (EX_USAGE) for command-line usage errors; `6` is reserved for a
+    /// future dedicated signing-failure class. See the README exit-code table.
+    public var exitCode: Int32 {
+        switch self {
+        case .message: 1
+        case .projectExists: 2
+        case .invalidConfiguration: 3
+        case .importFailed: 4
+        case .processFailed: 5
+        case .notarizationFailed: 7
+        }
+    }
+}
+
+/// Exit code for a command-line usage/parse error (sysexits.h EX_USAGE).
+public let usageErrorExitCode: Int32 = 64
+
+/// Maps any thrown error to a process exit code, defaulting unknown errors to 1.
+public func exitCode(for error: any Error) -> Int32 {
+    (error as? MunkiPkgError)?.exitCode ?? 1
 }
 
 public struct ProcessResult: Equatable, Sendable {
@@ -78,11 +108,36 @@ public final class SystemProcessRunner: ProcessRunning, ProcessControlling, @unc
         } catch {
             throw MunkiPkgError.message("\(URL(fileURLWithPath: executable).lastPathComponent) execution failed: \(error.localizedDescription)")
         }
+
+        // Drain stdout and stderr concurrently on background queues *before*
+        // waiting. Reading only after waitUntilExit() (or draining the pipes
+        // sequentially) deadlocks: a child that writes more than the ~64KB pipe
+        // buffer to either stream blocks on write(), never exits, and the wait
+        // hangs forever. Each field is written exactly once by its own closure;
+        // the parent reads the box only after group.wait(), so there is no
+        // concurrent mutation.
+        final class DataBox: @unchecked Sendable {
+            var stdout = Data()
+            var stderr = Data()
+        }
+        let box = DataBox()
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.stdout = stdout.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.stderr = stderr.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
         process.waitUntilExit()
+        group.wait()
         return ProcessResult(
             status: process.terminationStatus,
-            stdout: stdout.fileHandleForReading.readDataToEndOfFile(),
-            stderr: stderr.fileHandleForReading.readDataToEndOfFile()
+            stdout: box.stdout,
+            stderr: box.stderr
         )
     }
 
