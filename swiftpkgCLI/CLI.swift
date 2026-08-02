@@ -27,6 +27,9 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Apply Bom.txt metadata without building.")
     public var sync = false
 
+    @Flag(name: .long, help: "Validate the project (build-info, name, scripts, signing coherence) without building. Exits non-zero on any error. Fast pre-check for PR CI.")
+    public var lint = false
+
     @Flag(name: .long, help: "Inhibit status messages on stdout.")
     public var quiet = false
 
@@ -75,6 +78,7 @@ public enum CLICommand {
     case create(project: URL, format: BuildInfoFormat, force: Bool)
     case `import`(package: URL, project: URL, format: BuildInfoFormat)
     case synchronize(project: URL, requestedFormat: BuildInfoFormat?)
+    case lint(project: URL, requestedFormat: BuildInfoFormat?)
     case build(project: URL, configuration: PackageBuildOptions)
 
     /// Resolves a parsed option set into one executable command.
@@ -94,6 +98,7 @@ public enum CLICommand {
             )
         }
         if options.sync { return .synchronize(project: project, requestedFormat: requestedFormat) }
+        if options.lint { return .lint(project: project, requestedFormat: requestedFormat) }
         return .build(
             project: project,
             configuration: PackageBuildOptions(
@@ -134,6 +139,7 @@ public enum CLIParser {
       --yaml                  Create build-info in YAML format.
       --export-bom-info       Export the built package's Bom.txt.
       --sync                  Apply Bom.txt metadata without building.
+      --lint                  Validate the project without building.
       --quiet                 Inhibit status messages on stdout.
       -f, --force             Convert an existing directory to a project.
       --skip-signing          Skip configured package signing.
