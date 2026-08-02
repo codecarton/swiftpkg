@@ -49,6 +49,11 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
                 .notarize(package: context.output, configuration: notarizationConfig, skipsStapling: configuration.skipsStapling)
         }
         let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
+        if configuration.verifies {
+            let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
+            try PackageVerifier(runner: runner, console: console)
+                .verify(package: output, expectedIdentifier: packageConfiguration.identifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
+        }
         return BuildResult(
             name: packageConfiguration.name,
             version: packageConfiguration.version,

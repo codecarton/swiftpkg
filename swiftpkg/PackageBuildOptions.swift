@@ -8,6 +8,10 @@ public struct PackageBuildOptions: Sendable {
     public let skipsSigning: Bool
     public let skipsNotarization: Bool
     public let skipsStapling: Bool
+    /// After building, assert the package matches what build-info declared
+    /// (signature present when signing was requested, Gatekeeper-accepted when
+    /// notarized). Fails the build on mismatch.
+    public let verifies: Bool
     /// Overrides the build-info version (resolved before `${version}` substitution).
     public let versionOverride: String?
     /// Writes the package here instead of the project's `build/` directory.
@@ -20,6 +24,7 @@ public struct PackageBuildOptions: Sendable {
         skipsSigning: Bool = false,
         skipsNotarization: Bool = false,
         skipsStapling: Bool = false,
+        verifies: Bool = false,
         versionOverride: String? = nil,
         outputDirectory: URL? = nil
     ) {
@@ -29,6 +34,7 @@ public struct PackageBuildOptions: Sendable {
         self.skipsSigning = skipsSigning
         self.skipsNotarization = skipsNotarization
         self.skipsStapling = skipsStapling
+        self.verifies = verifies
         self.versionOverride = versionOverride
         self.outputDirectory = outputDirectory
     }

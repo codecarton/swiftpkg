@@ -45,6 +45,9 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Skip stapling after notarization.")
     public var skipStapling = false
 
+    @Flag(name: .long, help: "After building, verify the package matches build-info: signature present when signing was requested (pkgutil), Gatekeeper-accepted when notarized (spctl). Fails the build on mismatch.")
+    public var verify = false
+
     @Flag(name: .long, help: "Accepted for munki-pkg compatibility; ignored. swiftpkg never prompts to import into a repo, so there is nothing to skip.")
     public var skipImport = false
 
@@ -108,6 +111,7 @@ public enum CLICommand {
                 skipsSigning: options.skipSigning,
                 skipsNotarization: options.skipNotarization,
                 skipsStapling: options.skipStapling,
+                verifies: options.verify,
                 versionOverride: options.pkgVersion,
                 outputDirectory: options.outputDir.map { URL(fileURLWithPath: $0).standardizedFileURL }
             )
@@ -145,6 +149,7 @@ public enum CLIParser {
       --skip-signing          Skip configured package signing.
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
+      --verify                Verify the built package matches build-info.
       --output-format FORMAT  Build result on stdout: text (default) or json.
       --skip-import           Accepted for munki-pkg compatibility; ignored.
       --pkg-version VERSION   Override the build-info version.
