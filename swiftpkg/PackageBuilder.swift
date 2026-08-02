@@ -1,6 +1,12 @@
 import Darwin
 import Foundation
 
+/// Mutable holder used to carry a value out of a non-escaping async closure.
+private final class Box<Value> {
+    var value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 /// Coordinates the stages that produce, sign, and optionally notarize a package.
 public struct PackageBuildCoordinator: @unchecked Sendable {
     public let fileManager: FileManager
@@ -13,7 +19,8 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         self.console = console
     }
 
-    public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws {
+    @discardableResult
+    public func buildPackage(in project: URL, configuration: PackageBuildOptions) async throws -> BuildResult {
         let packageConfiguration = try BuildInfoStore.load(from: project, requestedFormat: configuration.requestedFormat, versionOverride: configuration.versionOverride)
         try Self.validatePackageName(packageConfiguration.name)
         if packageConfiguration.ownership != .recommended, geteuid() != 0 {
@@ -21,6 +28,8 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         }
         let layout = try PackageProjectLayout(project: project, fileManager: fileManager, outputDirectory: configuration.outputDirectory)
         try layout.createBuildDirectoryIfNeeded()
+        let output = layout.buildDirectory.appendingPathComponent(packageConfiguration.name)
+        let notarization = Box(NotarizationService.Outcome(accepted: false, stapled: false))
         try await layout.withTemporaryDirectory { temporaryDirectory in
             let context = PackageBuildContext(configuration: packageConfiguration, layout: layout, temporaryDirectory: temporaryDirectory)
             let scriptPreparer = ScriptPreparer(fileManager: fileManager, console: console)
@@ -35,10 +44,21 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
                 try DistributionPackageBuilder(fileManager: fileManager, runner: runner, console: console)
                     .buildDistribution(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
             }
-            guard let notarization = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
-            try await NotarizationService(runner: runner, console: console)
-                .notarize(package: context.output, configuration: notarization, skipsStapling: configuration.skipsStapling)
+            guard let notarizationConfig = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
+            notarization.value = try await NotarizationService(runner: runner, console: console)
+                .notarize(package: context.output, configuration: notarizationConfig, skipsStapling: configuration.skipsStapling)
         }
+        let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
+        return BuildResult(
+            name: packageConfiguration.name,
+            version: packageConfiguration.version,
+            identifier: packageConfiguration.identifier,
+            pkgPath: output.path,
+            sha256: try sha256Hex(ofFileAt: output),
+            signed: signed,
+            notarized: notarization.value.accepted,
+            stapled: notarization.value.stapled
+        )
     }
 
     private func packageBOM(for package: URL) throws -> URL {
@@ -220,7 +240,18 @@ struct NotarizationService: Sendable {
     let runner: any ProcessRunning
     let console: Console
 
-    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws {
+    /// The outcome of a notarization attempt: whether Apple accepted the
+    /// submission, and whether the ticket was stapled to the package.
+    struct Outcome: Sendable {
+        let accepted: Bool
+        let stapled: Bool
+    }
+
+    /// Uploads the package and always polls for acceptance, then staples when
+    /// accepted and stapling was not skipped. Acceptance and stapling are
+    /// reported independently so the build manifest reflects what actually
+    /// happened rather than what was merely requested.
+    func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws -> Outcome {
         if case let .invalid(reason) = configuration.authentication {
             throw MunkiPkgError.invalidConfiguration(reason)
         }
@@ -229,10 +260,12 @@ struct NotarizationService: Sendable {
         guard let identifier = submission["id"] as? String else { throw MunkiPkgError.notarizationFailed("Unexpected output from notarytool") }
         console.display("id \(identifier)", toolName: "notarytool")
         if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
-        guard !skipsStapling, try await waitForAcceptance(identifier, configuration: configuration) else { return }
+        let accepted = try await waitForAcceptance(identifier, configuration: configuration)
+        guard accepted, !skipsStapling else { return Outcome(accepted: accepted, stapled: false) }
         console.display("Stapling package")
         try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
         console.display("The staple and validate action worked!")
+        return Outcome(accepted: true, stapled: true)
     }
 
     private func waitForAcceptance(_ identifier: String, configuration: NotarizationConfiguration) async throws -> Bool {

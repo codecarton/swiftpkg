@@ -2,6 +2,12 @@ import ArgumentParser
 import Foundation
 import SwiftPkgCore
 
+/// Format for the machine/human result printed to stdout after a build.
+public enum BuildManifestFormat: String, CaseIterable, Sendable, ExpressibleByArgument {
+    case text
+    case json
+}
+
 public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Create a new empty project with default settings.")
     public var create = false
@@ -41,6 +47,9 @@ public struct CLIOptions: ParsableArguments {
 
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
+
+    @Option(name: .long, help: "Result printed to stdout after a build: 'text' (default) or 'json' (machine-readable manifest). json implies quiet human output so stdout carries only the manifest.")
+    public var outputFormat: BuildManifestFormat = .text
 
     @Option(name: .long, help: "Override the build-info version (e.g. from a git tag or CI variable). Resolved before ${version} substitution.")
     public var pkgVersion: String?
@@ -130,6 +139,7 @@ public enum CLIParser {
       --skip-signing          Skip configured package signing.
       --skip-notarization     Skip configured notarization.
       --skip-stapling         Skip stapling after notarization.
+      --output-format FORMAT  Build result on stdout: text (default) or json.
       --skip-import           Accepted for munki-pkg compatibility; ignored.
       --pkg-version VERSION   Override the build-info version.
       --output-dir DIR        Write the package to DIR instead of build/.

@@ -18,8 +18,11 @@ struct ReceiptOnlyBuildTests {
             #"{"name":"ReceiptOnly-1.0.pkg","identifier":"com.test.receipt","version":"1.0"}"#,
             to: project.appendingPathComponent("build-info.json")
         )
-
         let runner = RecordingRunner()
+        runner.onRun = { executable, arguments in
+            guard executable.hasSuffix("pkgbuild"), let output = arguments.last else { return }
+            try write("fake package", to: URL(fileURLWithPath: output))
+        }
         let coordinator = PackageBuildCoordinator(fileManager: .default, runner: runner, console: makeConsole())
         try await coordinator.buildPackage(in: project, configuration: PackageBuildOptions(skipsSigning: true))
 

@@ -80,6 +80,44 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+MANIFEST="$WORK/Manifest"
+run "$BIN" --create "$MANIFEST"
+mkdir -p "$MANIFEST/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$MANIFEST/payload/usr/local/bin/tool"
+chmod +x "$MANIFEST/payload/usr/local/bin/tool"
+printf '+ %s\n' "$BIN --output-format json $MANIFEST"
+"$BIN" --output-format json "$MANIFEST" > "$WORK/manifest.json"
+python3 - "$WORK/manifest.json" "$MANIFEST/build/Manifest-1.0.pkg" <<'PY'
+import hashlib, json, os.path, sys
+
+# Explicit checks that raise, rather than assert: `python3 -O`/PYTHONOPTIMIZE
+# strips assert statements, which would let a bad manifest print "manifest OK".
+def fail(message):
+    print("manifest check failed:", message, file=sys.stderr)
+    raise SystemExit(1)
+
+manifest = json.load(open(sys.argv[1]))
+for key in ("name", "version", "identifier", "pkg_path", "sha256", "signed", "notarized", "stapled"):
+    if key not in manifest:
+        fail(f"missing key: {key}")
+if manifest["name"] != "Manifest-1.0.pkg":
+    fail(f'name: {manifest["name"]}')
+if manifest["version"] != "1.0":
+    fail(f'version: {manifest["version"]}')
+if manifest["identifier"] != "com.github.munki.pkg.Manifest":
+    fail(f'identifier: {manifest["identifier"]}')
+if not (manifest["signed"] is False and manifest["notarized"] is False and manifest["stapled"] is False):
+    fail("signed/notarized/stapled are not all false")
+if os.path.normpath(manifest["pkg_path"]) != os.path.normpath(sys.argv[2]):
+    fail(f'pkg_path: {manifest["pkg_path"]}')
+if not os.path.isfile(manifest["pkg_path"]):
+    fail(f'pkg not found: {manifest["pkg_path"]}')
+digest = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+if manifest["sha256"] != digest:
+    fail(f'sha256 mismatch: {manifest["sha256"]} != {digest}')
+print("manifest OK")
+PY
+
 OVERRIDE="$WORK/Override"
 run "$BIN" --create "$OVERRIDE"
 mkdir -p "$OVERRIDE/payload/usr/local/bin"
