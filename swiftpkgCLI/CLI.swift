@@ -2,6 +2,12 @@ import ArgumentParser
 import Foundation
 import SwiftPkgCore
 
+/// Format for the machine/human result printed to stdout after a build.
+public enum BuildManifestFormat: String, CaseIterable, Sendable, ExpressibleByArgument {
+    case text
+    case json
+}
+
 public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Create a new empty project with default settings.")
     public var create = false
@@ -20,6 +26,9 @@ public struct CLIOptions: ParsableArguments {
 
     @Flag(name: .long, help: "Apply Bom.txt metadata without building.")
     public var sync = false
+
+    @Flag(name: .long, help: "Validate the project (build-info, name, scripts, signing coherence) without building. Exits non-zero on any error. Fast pre-check for PR CI.")
+    public var lint = false
 
     @Flag(name: .long, help: "Inhibit status messages on stdout.")
     public var quiet = false
@@ -45,8 +54,26 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Do not merge SWIFTPKG_* variables from the calling process environment.")
     public var noInheritEnv = false
 
+    @Flag(name: .long, help: "Write a <pkg>.provenance.json sidecar (tool version, build time, git commit/remote, input digest, package hash) for supply-chain attestation.")
+    public var provenance = false
+
+    @Flag(name: .long, help: "After building, verify the package matches build-info: signature present when signing was requested (pkgutil), Gatekeeper-accepted when notarized (spctl). Fails the build on mismatch.")
+    public var verify = false
+
+    @Flag(name: .long, help: "Accepted for munki-pkg compatibility; ignored. swiftpkg never prompts to import into a repo, so there is nothing to skip.")
+    public var skipImport = false
+
     @Flag(name: .long, help: "Show program's version number and exit.")
     public var version = false
+
+    @Option(name: .long, help: "Result printed to stdout after a build: 'text' (default) or 'json' (machine-readable manifest). json implies quiet human output so stdout carries only the manifest.")
+    public var outputFormat: BuildManifestFormat = .text
+
+    @Option(name: .long, help: "Override the build-info version (e.g. from a git tag or CI variable). Resolved before ${version} substitution.")
+    public var pkgVersion: String?
+
+    @Option(name: .long, help: "Write the built package to this directory instead of the project's build/ directory. Created if it does not exist.")
+    public var outputDir: String?
 
     @Argument(help: "The package project directory.")
     public var projectDirectory: String?
@@ -66,6 +93,7 @@ public enum CLICommand {
     case create(project: URL, format: BuildInfoFormat, force: Bool)
     case `import`(package: URL, project: URL, format: BuildInfoFormat)
     case synchronize(project: URL, requestedFormat: BuildInfoFormat?)
+    case lint(project: URL, requestedFormat: BuildInfoFormat?)
     case build(project: URL, configuration: PackageBuildOptions)
 
     /// Resolves a parsed option set into one executable command.
@@ -85,6 +113,7 @@ public enum CLICommand {
             )
         }
         if options.sync { return .synchronize(project: project, requestedFormat: requestedFormat) }
+        if options.lint { return .lint(project: project, requestedFormat: requestedFormat) }
         return .build(
             project: project,
             configuration: PackageBuildOptions(
@@ -96,7 +125,11 @@ public enum CLICommand {
                 skipsStapling: options.skipStapling,
                 envFile: options.envFile,
                 strictEnvironment: options.strictEnv,
-                inheritsEnvironment: !options.noInheritEnv
+                inheritsEnvironment: !options.noInheritEnv,
+                writesProvenance: options.provenance,
+                verifies: options.verify,
+                versionOverride: options.pkgVersion,
+                outputDirectory: options.outputDir.map { URL(fileURLWithPath: $0).standardizedFileURL }
             )
         )
     }
@@ -126,6 +159,7 @@ public enum CLIParser {
       --yaml                  Create build-info in YAML format.
       --export-bom-info       Export the built package's Bom.txt.
       --sync                  Apply Bom.txt metadata without building.
+      --lint                  Validate the project without building.
       --quiet                 Inhibit status messages on stdout.
       -f, --force             Convert an existing directory to a project.
       --skip-signing          Skip configured package signing.
@@ -134,6 +168,12 @@ public enum CLIParser {
       --env-file PATH         Substitute ${VAR} from a .env file into scripts.
       --strict-env            Fail on unresolved ${VAR} placeholders.
       --no-inherit-env        Don't merge SWIFTPKG_* from the environment.
+      --provenance            Write a <pkg>.provenance.json attestation sidecar.
+      --verify                Verify the built package matches build-info.
+      --output-format FORMAT  Build result on stdout: text (default) or json.
+      --skip-import           Accepted for munki-pkg compatibility; ignored.
+      --pkg-version VERSION   Override the build-info version.
+      --output-dir DIR        Write the package to DIR instead of build/.
     """
 
     public static func parse(_ arguments: [String]) -> CLIParseResult {
