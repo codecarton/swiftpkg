@@ -24,9 +24,11 @@ final class RecordingRunner: ProcessRunning, @unchecked Sendable {
 
     var calls: [Call] = []
     var result = ProcessResult(status: 0, stdout: Data(), stderr: Data())
+    var onRun: ((String, [String]) throws -> Void)?
 
     func run(executable: String, arguments: [String]) throws -> ProcessResult {
         calls.append(Call(executable: executable, arguments: arguments))
+        try onRun?(executable, arguments)
         return result
     }
 }

@@ -28,7 +28,7 @@ public struct PackageImporter {
     /// Imports a package into a new project using the requested configuration format.
     public func importPackage(at package: URL, to project: URL, format: BuildInfoFormat) throws {
         guard !fileManager.itemExists(at: project) else {
-            throw MunkiPkgError.message("Directory \(project.path) already exists.")
+            throw MunkiPkgError.projectExists("Directory \(project.path) already exists.")
         }
         if fileManager.directoryExists(at: package) {
             try importBundlePackage(package, project: project, format: format)
@@ -42,7 +42,7 @@ public struct PackageImporter {
         let contents = package.appendingPathComponent("Contents", isDirectory: true)
         let distributionFiles = try fileManager.contents(at: contents).filter { $0.hasSuffix(".dist") }
         guard distributionFiles.isEmpty else {
-            throw MunkiPkgError.message("Bundle-style distribution packages are not supported for import. Consider importing the included sub-package(s).")
+            throw MunkiPkgError.importFailed("Bundle-style distribution packages are not supported for import. Consider importing the included sub-package(s).")
         }
         try fileManager.createDirectory(at: project, withIntermediateDirectories: false)
         do {
@@ -104,7 +104,7 @@ public struct PackageImporter {
             name.hasSuffix(".pkg") && fileManager.directoryExists(at: project.appendingPathComponent(name))
         }
         guard packages.count == 1 else {
-            throw MunkiPkgError.message("Distribution packages to be imported must contain exactly one component package! Found: \(packages)")
+            throw MunkiPkgError.importFailed("Distribution packages to be imported must contain exactly one component package! Found: \(packages)")
         }
         let component = project.appendingPathComponent(packages[0])
         for name in ["Bom", "PackageInfo", "Payload", "Scripts"] {
@@ -129,10 +129,10 @@ public struct PackageImporter {
 
     private func convertPackageInfo(package: URL, project: URL, format: BuildInfoFormat) throws {
         let url = project.appendingPathComponent("PackageInfo")
-        guard let parser = XMLParser(contentsOf: url) else { throw MunkiPkgError.message("Could not parse \(url.path)") }
+        guard let parser = XMLParser(contentsOf: url) else { throw MunkiPkgError.importFailed("Could not parse \(url.path)") }
         let delegate = PackageInfoParser()
         parser.delegate = delegate
-        guard parser.parse() else { throw MunkiPkgError.message("Could not parse \(url.path): \(parser.parserError?.localizedDescription ?? "invalid XML")") }
+        guard parser.parse() else { throw MunkiPkgError.importFailed("Could not parse \(url.path): \(parser.parserError?.localizedDescription ?? "invalid XML")") }
         let attributes = delegate.attributes
         var values: [String: Any] = [
             "identifier": attributes["identifier"] ?? "",
@@ -150,8 +150,13 @@ public struct PackageImporter {
 
     private func convertInfoPlist(package: URL, project: URL, format: BuildInfoFormat) throws {
         let url = package.appendingPathComponent("Contents/Info.plist")
-        let object = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
-        guard let plist = object as? [String: Any] else { throw MunkiPkgError.message("Could not read \(url.path)") }
+        let object: Any
+        do {
+            object = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil)
+        } catch {
+            throw MunkiPkgError.importFailed("Could not read \(url.path): \(error.localizedDescription)")
+        }
+        guard let plist = object as? [String: Any] else { throw MunkiPkgError.importFailed("Could not read \(url.path)") }
         let restart = plist["IFPkgFlagRestartAction"] as? String
         let action: String
         if ["RequiredRestart", "RecommendedRestart"].contains(restart) { action = "restart" }

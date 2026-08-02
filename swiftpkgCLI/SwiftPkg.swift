@@ -16,20 +16,26 @@ public enum SwiftPkg {
             return 0
         case .failure(let message):
             FileHandle.standardError.write(Data(("ERROR: \(message)\n").utf8))
-            return 255
+            return usageErrorExitCode
         case .options(let options):
             let command: CLICommand?
             do {
                 command = try CLICommand.resolve(from: options)
             } catch {
                 consoleError(String(describing: error))
-                return 255
+                return exitCode(for: error)
             }
             guard let command else {
                 print(CLIParser.usage)
                 return 0
             }
-            let console = Console(quiet: options.quiet)
+            // json output reserves stdout for the manifest, so suppress human
+            // status — but only for builds, which are the only command that
+            // emits a manifest. Other commands keep their normal output.
+            // warnings/errors still go to stderr via Console.
+            let isJSONBuild: Bool
+            if case .build = command { isJSONBuild = options.outputFormat == .json } else { isJSONBuild = false }
+            let console = Console(quiet: options.quiet || isJSONBuild)
             do {
                 switch command {
                 case let .create(project, format, force):
@@ -64,13 +70,16 @@ public enum SwiftPkg {
                             ? "\(project.path) is not a directory."
                             : "\(project.path): Project not found.")
                     }
-                    try await PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
+                    let result = try await PackageBuildCoordinator(fileManager: fileManager, runner: runner, console: console)
                         .buildPackage(in: project, configuration: configuration)
+                    if options.outputFormat == .json {
+                        print(try result.jsonString())
+                    }
                 }
                 return 0
             } catch {
                 console.error(String(describing: error))
-                return 255
+                return exitCode(for: error)
             }
         }
     }
