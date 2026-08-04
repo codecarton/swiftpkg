@@ -102,7 +102,7 @@ public struct PackageConfiguration: Sendable {
     public static func defaults(for project: URL) -> PackageConfiguration {
         let baseName = project.lastPathComponent.replacingOccurrences(of: " ", with: "")
         return PackageConfiguration(
-            name: "\(baseName)-${version}.pkg", identifier: "com.github.munki.pkg.\(baseName)", version: "1.0",
+            name: "\(baseName)-${version}.pkg", identifier: "org.swiftpkg.pkg.\(baseName)", version: "1.0",
             ownership: .recommended, installLocation: "/", compression: nil, minimumOSVersion: nil,
             usesLargePayload: false, postInstallAction: .none, preservesExtendedAttributes: false,
             suppressesBundleRelocation: true, usesDistributionStyle: false, title: nil,

@@ -160,7 +160,7 @@ if manifest["name"] != "Manifest-1.0.pkg":
     fail(f'name: {manifest["name"]}')
 if manifest["version"] != "1.0":
     fail(f'version: {manifest["version"]}')
-if manifest["identifier"] != "com.github.munki.pkg.Manifest":
+if manifest["identifier"] != "org.swiftpkg.pkg.Manifest":
     fail(f'identifier: {manifest["identifier"]}')
 if not (manifest["signed"] is False and manifest["notarized"] is False and manifest["stapled"] is False):
     fail("signed/notarized/stapled are not all false")

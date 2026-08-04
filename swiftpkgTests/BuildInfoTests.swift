@@ -8,7 +8,7 @@ struct BuildInfoTests {
         let configuration = PackageConfiguration.defaults(for: URL(fileURLWithPath: "/tmp/My Project"))
 
         #expect(configuration.name == "MyProject-${version}.pkg")
-        #expect(configuration.identifier == "com.github.munki.pkg.MyProject")
+        #expect(configuration.identifier == "org.swiftpkg.pkg.MyProject")
         #expect(configuration.version == "1.0")
         #expect(configuration.ownership == .recommended)
         #expect(!configuration.usesDistributionStyle)
