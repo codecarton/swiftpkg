@@ -160,11 +160,42 @@ public enum ScriptEnvironment {
         return owned
     }
 
+    /// Names the install environment supplies, which no build variable is
+    /// expected to provide. `shellOwnedNames` only recognises names a script
+    /// assigns itself, so without this list `${HOME}` or `${PATH}` — expanded by
+    /// the shell at install time like any other environment variable — get
+    /// reported as forgotten build variables, and `--strict-env` fails the build
+    /// on a correct script.
+    ///
+    /// Deliberately limited to names the environment is guaranteed to define:
+    /// the POSIX/shell set, and the variables macOS `installer` exports into
+    /// package scripts. Anything outside it stays reportable, so a genuinely
+    /// missing variable is still caught.
+    static let environmentOwnedNames: Set<String> = [
+        // Shell and POSIX environment.
+        "HOME", "PATH", "PWD", "OLDPWD", "SHELL", "TMPDIR", "USER", "LOGNAME",
+        "TERM", "LANG", "IFS", "SHLVL", "PS1", "PS2", "PS4", "EDITOR", "VISUAL", "PAGER",
+        // Shell-maintained specials.
+        "RANDOM", "SECONDS", "LINENO", "PPID", "UID", "EUID", "GROUPS",
+        "HOSTNAME", "HOSTTYPE", "OSTYPE", "MACHTYPE", "BASH_VERSION", "ZSH_VERSION",
+        // Exported by macOS `installer` into package scripts.
+        "INSTALLER_TEMP", "INSTALLER_PAYLOAD_DIR", "INSTALLER_SECURE_TEMP",
+        "PACKAGE_PATH", "SCRIPT_NAME", "RECEIPT_PATH", "DSTVOLUME", "DSTROOT",
+        "COMMAND_LINE_INSTALL", "CM_BUILD",
+    ]
+
+    /// Names that already resolve at install time and therefore need no build
+    /// variable: those the script assigns itself, plus those the environment
+    /// supplies.
+    static func installTimeOwnedNames(in content: String) -> Set<String> {
+        shellOwnedNames(in: content).union(environmentOwnedNames)
+    }
+
     /// Unresolved placeholders worth reporting: referenced by the script, absent
-    /// from `variables`, and not a name the script declares for itself.
+    /// from `variables`, and not a name that already resolves at install time.
     static func reportableUnresolved(in content: String, with variables: [String: String]) -> Set<String> {
         PlaceholderReplacer.replace(in: content, with: variables).unresolved
-            .subtracting(shellOwnedNames(in: content))
+            .subtracting(installTimeOwnedNames(in: content))
     }
 
     /// Returns placeholder names referenced by any script but not in `variables`.
@@ -216,7 +247,7 @@ public enum ScriptEnvironment {
                 try Data(result.content.utf8).write(to: destination, options: .atomic)
                 if !result.substituted.isEmpty { substitutedByScript[name] = result.substituted }
                 // Substitution is unchanged — only what gets reported narrows.
-                let reportable = result.unresolved.subtracting(shellOwnedNames(in: text))
+                let reportable = result.unresolved.subtracting(installTimeOwnedNames(in: text))
                 if !reportable.isEmpty { unresolvedByScript[name] = reportable }
                 // Keep values non-world-readable during the build; force owner-exec
                 // since pkgbuild requires runnable scripts.
