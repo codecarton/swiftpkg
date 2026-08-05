@@ -221,6 +221,32 @@ struct ShellOwnedPlaceholderTests {
         }
     }
 
+    @Test("environment-supplied names are not reported as unresolved placeholders")
+    func environmentNamesAreNotPlaceholders() {
+        let script = """
+        #!/bin/sh
+        echo "${HOME}" "${PATH}" "${USER}" "${TMPDIR}"
+        cp "$1" "${DSTVOLUME}/opt"
+        """
+        #expect(ScriptEnvironment.reportableUnresolved(in: script, with: [:]).isEmpty)
+    }
+
+    @Test("an environment name does not mask a genuinely missing variable beside it")
+    func environmentNamesDoNotMaskMissingOnes() {
+        let script = """
+        #!/bin/sh
+        echo "${HOME}/${API_TOKEN}"
+        """
+        #expect(ScriptEnvironment.reportableUnresolved(in: script, with: [:]) == ["API_TOKEN"])
+    }
+
+    @Test("an environment name supplied as a build variable is still substituted")
+    func environmentNameStillSubstitutes() {
+        let result = PlaceholderReplacer.replace(in: "echo ${TMPDIR}\n", with: ["TMPDIR": "/staged"])
+        #expect(result.content == "echo /staged\n")
+        #expect(result.substituted == ["TMPDIR"])
+    }
+
     @Test("suppression is per-script, not global")
     func suppressionIsPerScript() throws {
         let temp = try TemporaryDirectory()
