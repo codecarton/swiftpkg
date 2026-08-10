@@ -26,14 +26,14 @@ public enum EnvLoader {
 
         let attributes = try fileManager.attributesOfItem(atPath: path)
         if let size = attributes[.size] as? Int, size > maxFileSize {
-            throw MunkiPkgError.invalidConfiguration("Environment file exceeds the \(maxFileSize)-byte limit: \(path)")
+            throw SwiftPkgError.invalidConfiguration("Environment file exceeds the \(maxFileSize)-byte limit: \(path)")
         }
         if let permissions = attributes[.posixPermissions] as? Int, permissions & 0o044 != 0 {
             console?.warning("environment file \(path) is group- or world-readable (mode 0\(String(permissions, radix: 8))). Recommend `chmod 600 \(path)`.")
         }
 
         guard let data = fileManager.contents(atPath: path), let content = String(data: data, encoding: .utf8) else {
-            throw MunkiPkgError.invalidConfiguration("Failed to read environment file: \(path)")
+            throw SwiftPkgError.invalidConfiguration("Failed to read environment file: \(path)")
         }
 
         var variables: [String: String] = [:]

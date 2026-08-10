@@ -44,7 +44,7 @@ struct EnvLoaderTests {
         defer { temp.remove() }
         let path = temp.url.appendingPathComponent(".env").path
         try write(String(repeating: "A=B\n", count: EnvLoader.maxFileSize), to: URL(fileURLWithPath: path))
-        #expect(throws: MunkiPkgError.self) { try EnvLoader.load(from: path) }
+        #expect(throws: SwiftPkgError.self) { try EnvLoader.load(from: path) }
     }
 
     @Test("missing file yields no variables")

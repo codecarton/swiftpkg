@@ -46,7 +46,7 @@ public enum SwiftPkg {
                         .importPackage(at: package, to: project, format: format)
                 case let .synchronize(project, requestedFormat):
                     guard fileManager.directoryExists(at: project) else {
-                        throw MunkiPkgError.message(fileManager.itemExists(at: project)
+                        throw SwiftPkgError.message(fileManager.itemExists(at: project)
                             ? "\(project.path) is not a directory."
                             : "\(project.path): Project not found.")
                     }
@@ -66,7 +66,7 @@ public enum SwiftPkg {
                     return 0
                 case let .build(project, configuration):
                     guard fileManager.directoryExists(at: project) else {
-                        throw MunkiPkgError.message(fileManager.itemExists(at: project)
+                        throw SwiftPkgError.message(fileManager.itemExists(at: project)
                             ? "\(project.path) is not a directory."
                             : "\(project.path): Project not found.")
                     }

@@ -17,14 +17,14 @@ struct PackageVerifier {
         if signed {
             let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--check-signature", package.path])
             guard result.status == 0 else {
-                throw MunkiPkgError.message("Verification failed: package is not validly signed. \(diagnostics(result))")
+                throw SwiftPkgError.message("Verification failed: package is not validly signed. \(diagnostics(result))")
             }
             console.display("Verified package signature")
         }
         if notarized {
             let result = try runner.run(executable: ToolPaths.spctl, arguments: ["-a", "-vvv", "-t", "install", package.path])
             guard result.status == 0 else {
-                throw MunkiPkgError.message("Verification failed: package does not pass Gatekeeper assessment. \(diagnostics(result))")
+                throw SwiftPkgError.message("Verification failed: package does not pass Gatekeeper assessment. \(diagnostics(result))")
             }
             console.display("Verified Gatekeeper assessment")
         }
@@ -41,7 +41,7 @@ struct PackageVerifier {
         defer { try? fileManager.removeItem(at: scratch) }
         let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--expand", package.path, scratch.path])
         guard result.status == 0 else {
-            throw MunkiPkgError.message("Verification failed: could not expand \(package.lastPathComponent) to inspect its metadata. \(diagnostics(result))")
+            throw SwiftPkgError.message("Verification failed: could not expand \(package.lastPathComponent) to inspect its metadata. \(diagnostics(result))")
         }
         // A component package carries a top-level PackageInfo. If it's absent
         // (e.g. a distribution-style package, whose metadata lives elsewhere)
@@ -50,7 +50,7 @@ struct PackageVerifier {
               let xml = String(data: data, encoding: .utf8)
         else { return }
         if let mismatch = Self.metadataMismatch(expectedIdentifier: expectedIdentifier, expectedVersion: expectedVersion, packageInfoXML: xml) {
-            throw MunkiPkgError.message("Verification failed: \(mismatch)")
+            throw SwiftPkgError.message("Verification failed: \(mismatch)")
         }
         console.display("Verified package identifier and version")
     }

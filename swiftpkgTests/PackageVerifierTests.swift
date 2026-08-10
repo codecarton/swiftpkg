@@ -45,7 +45,7 @@ struct PackageVerifierTests {
     func signedFails() throws {
         let (temp, package) = try makePackage(); defer { temp.remove() }
         let runner = runnerFailing(ToolPaths.pkgutil)
-        #expect(throws: MunkiPkgError.self) {
+        #expect(throws: SwiftPkgError.self) {
             try PackageVerifier(runner: runner, console: makeConsole())
                 .verify(package: package, expectedIdentifier: "com.example.app", expectedVersion: "1.0", signed: true, notarized: false)
         }
@@ -56,7 +56,7 @@ struct PackageVerifierTests {
         let (temp, package) = try makePackage(); defer { temp.remove() }
         let runner = RecordingRunner()
         runner.result = ProcessResult(status: 1, stdout: Data(), stderr: Data("corrupt".utf8))
-        #expect(throws: MunkiPkgError.self) {
+        #expect(throws: SwiftPkgError.self) {
             try PackageVerifier(runner: runner, console: makeConsole())
                 .verify(package: package, expectedIdentifier: "com.example.app", expectedVersion: "1.0", signed: false, notarized: false)
         }
@@ -66,7 +66,7 @@ struct PackageVerifierTests {
     func notarizedRunsSpctl() throws {
         let (temp, package) = try makePackage(); defer { temp.remove() }
         let runner = runnerFailing(ToolPaths.spctl)
-        #expect(throws: MunkiPkgError.self) {
+        #expect(throws: SwiftPkgError.self) {
             try PackageVerifier(runner: runner, console: makeConsole())
                 .verify(package: package, expectedIdentifier: "com.example.app", expectedVersion: "1.0", signed: false, notarized: true)
         }

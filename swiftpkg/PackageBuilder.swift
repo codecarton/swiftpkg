@@ -83,7 +83,7 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         let envPath: String
         if let explicit = configuration.envFile {
             guard fileManager.fileExists(atPath: explicit) else {
-                throw MunkiPkgError.invalidConfiguration("--env-file not found: \(explicit)")
+                throw SwiftPkgError.invalidConfiguration("--env-file not found: \(explicit)")
             }
             envPath = explicit
         } else {
@@ -127,13 +127,13 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         let detail = unresolved.sorted { $0.key < $1.key }
             .map { "\($0.key): \($0.value.sorted().joined(separator: ", "))" }
             .joined(separator: "; ")
-        throw MunkiPkgError.invalidConfiguration("Unresolved script placeholders (--strict-env): \(detail)")
+        throw SwiftPkgError.invalidConfiguration("Unresolved script placeholders (--strict-env): \(detail)")
     }
 
     private func packageBOM(for package: URL) throws -> URL {
         let result = try runner.run(executable: ToolPaths.pkgutil, arguments: ["--bom", package.path])
         guard result.status == 0, let path = result.stdoutString.split(whereSeparator: \.isNewline).first else {
-            throw MunkiPkgError.processFailed(tool: "pkgutil", message: "pkgutil returned no BOM path")
+            throw SwiftPkgError.processFailed(tool: "pkgutil", message: "pkgutil returned no BOM path")
         }
         return URL(fileURLWithPath: String(path))
     }
@@ -151,7 +151,7 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
               !name.contains("\0"),
               URL(fileURLWithPath: name).lastPathComponent == name
         else {
-            throw MunkiPkgError.invalidConfiguration(
+            throw SwiftPkgError.invalidConfiguration(
                 "Package name \"\(name)\" must be a single path component (no \"/\" or \"..\")."
             )
         }
@@ -184,7 +184,7 @@ private struct PackageProjectLayout {
 
     func createBuildDirectoryIfNeeded() throws {
         if !fileManager.itemExists(at: buildDirectory) { try fileManager.createDirectory(at: buildDirectory, withIntermediateDirectories: true) }
-        else if !fileManager.directoryExists(at: buildDirectory) { throw MunkiPkgError.message("\(buildDirectory.path) is not a directory.") }
+        else if !fileManager.directoryExists(at: buildDirectory) { throw SwiftPkgError.message("\(buildDirectory.path) is not a directory.") }
     }
 
     func withTemporaryDirectory(_ body: (URL) async throws -> Void) async throws {
@@ -270,7 +270,7 @@ private struct ComponentPackageBuilder {
         try runner.runSuccessfully(executable: ToolPaths.pkgbuild, arguments: arguments, failureMessage: "pkgbuild failed while analyzing payload")
         let data = try Data(contentsOf: destination)
         guard var propertyList = try PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]] else {
-            throw MunkiPkgError.message("Couldn't read \(destination.path)")
+            throw SwiftPkgError.message("Couldn't read \(destination.path)")
         }
         for index in propertyList.indices where propertyList[index]["BundleIsRelocatable"] as? Bool == true {
             propertyList[index]["BundleIsRelocatable"] = false
@@ -326,11 +326,11 @@ struct NotarizationService: Sendable {
     /// happened rather than what was merely requested.
     func notarize(package: URL, configuration: NotarizationConfiguration, skipsStapling: Bool) async throws -> Outcome {
         if case let .invalid(reason) = configuration.authentication {
-            throw MunkiPkgError.invalidConfiguration(reason)
+            throw SwiftPkgError.invalidConfiguration(reason)
         }
         console.display("Uploading package to Apple notary service")
         let submission = try plistOutput(for: ["notarytool", "submit", "--output-format", "plist", package.path] + authenticationArguments(for: configuration), failureMessage: "Notarization upload failed.")
-        guard let identifier = submission["id"] as? String else { throw MunkiPkgError.notarizationFailed("Unexpected output from notarytool") }
+        guard let identifier = submission["id"] as? String else { throw SwiftPkgError.notarizationFailed("Unexpected output from notarytool") }
         console.display("id \(identifier)", toolName: "notarytool")
         if let message = submission["message"] as? String { console.display(message, toolName: "notarytool") }
         let accepted = try await waitForAcceptance(identifier, configuration: configuration)
@@ -351,10 +351,10 @@ struct NotarizationService: Sendable {
             let status = output["status"] as? String ?? "Unknown"
             let message = output["message"] as? String ?? ""
             if status == "Accepted" { console.display("Notarization successful. \(message)"); return true }
-            if status != "In Progress" && status != "Unknown" { throw MunkiPkgError.notarizationFailed("Notarization failed (\(status)): \(message)") }
+            if status != "In Progress" && status != "Unknown" { throw SwiftPkgError.notarizationFailed("Notarization failed (\(status)): \(message)") }
             console.display("Notarization state: \(status). Trying again in \(delay) seconds")
         }
-        throw MunkiPkgError.notarizationFailed("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
+        throw SwiftPkgError.notarizationFailed("Timeout exceeded (\(configuration.staplingTimeout)s) waiting for notarization to complete. The package was uploaded but never confirmed Accepted, so it was not stapled. Check with 'xcrun notarytool info \(identifier)' and staple manually if it later succeeds.")
     }
 
     /// Carries notarytool's own explanation through, the way every other
@@ -366,10 +366,10 @@ struct NotarizationService: Sendable {
         do {
             result = try runner.run(executable: ToolPaths.xcrun, arguments: arguments)
         } catch {
-            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+            throw SwiftPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
         }
         guard result.status == 0 else {
-            throw MunkiPkgError.notarizationFailed("notarytool: \(result.failureDetail(fallback: failureMessage))")
+            throw SwiftPkgError.notarizationFailed("notarytool: \(result.failureDetail(fallback: failureMessage))")
         }
         let data: Data
         if result.stdoutString.hasPrefix("Generated JWT"), let newline = result.stdoutString.firstIndex(of: "\n") {
@@ -381,9 +381,9 @@ struct NotarizationService: Sendable {
         do {
             object = try PropertyListSerialization.propertyList(from: data, format: nil)
         } catch {
-            throw MunkiPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
+            throw SwiftPkgError.notarizationFailed("\(failureMessage) \(error.localizedDescription)")
         }
-        guard let plist = object as? [String: Any] else { throw MunkiPkgError.notarizationFailed(failureMessage) }
+        guard let plist = object as? [String: Any] else { throw SwiftPkgError.notarizationFailed(failureMessage) }
         return plist
     }
 
