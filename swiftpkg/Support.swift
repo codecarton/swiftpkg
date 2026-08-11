@@ -1,19 +1,49 @@
 import Darwin
 import Foundation
 
-public enum MunkiPkgError: Error, CustomStringConvertible, LocalizedError {
+public enum SwiftPkgError: Error, CustomStringConvertible, LocalizedError {
     case message(String)
     case invalidConfiguration(String)
     case processFailed(tool: String, message: String)
+    case projectExists(String)
+    case importFailed(String)
+    case notarizationFailed(String)
 
     public var description: String {
         switch self {
-        case let .message(value), let .invalidConfiguration(value): value
+        case let .message(value),
+             let .invalidConfiguration(value),
+             let .projectExists(value),
+             let .importFailed(value),
+             let .notarizationFailed(value):
+            value
         case let .processFailed(tool, message): "\(tool): \(message)"
         }
     }
 
     public var errorDescription: String? { description }
+
+    /// Process exit code for this error class. `0` is reserved for success and
+    /// `64` (EX_USAGE) for command-line usage errors; `6` is reserved for a
+    /// future dedicated signing-failure class. See the README exit-code table.
+    public var exitCode: Int32 {
+        switch self {
+        case .message: 1
+        case .projectExists: 2
+        case .invalidConfiguration: 3
+        case .importFailed: 4
+        case .processFailed: 5
+        case .notarizationFailed: 7
+        }
+    }
+}
+
+/// Exit code for a command-line usage/parse error (sysexits.h EX_USAGE).
+public let usageErrorExitCode: Int32 = 64
+
+/// Maps any thrown error to a process exit code, defaulting unknown errors to 1.
+public func exitCode(for error: any Error) -> Int32 {
+    (error as? SwiftPkgError)?.exitCode ?? 1
 }
 
 public struct ProcessResult: Equatable, Sendable {
@@ -43,12 +73,26 @@ public protocol ProcessControlling: Sendable {
     func cancel()
 }
 
+public extension ProcessResult {
+    /// The tool's own account of a failure, appended to `fallback`. Tools explain
+    /// themselves better than we can from the outside — notarytool, for one, names
+    /// the missing keychain profile and the command that creates it — so prefer
+    /// their words. stdout is a fallback for tools that report failures there;
+    /// when neither says anything, `fallback` stands alone.
+    func failureDetail(fallback: String) -> String {
+        let detail = [stderrString, stdoutString]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        guard let detail else { return fallback }
+        return "\(fallback) \(detail)"
+    }
+}
+
 public extension ProcessRunning {
     func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws {
         let result = try run(executable: executable, arguments: arguments)
         guard result.status == 0 else {
-            let details = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MunkiPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: details.isEmpty ? failureMessage : "\(failureMessage) \(details)")
+            throw SwiftPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: result.failureDetail(fallback: failureMessage))
         }
     }
 }
@@ -76,13 +120,38 @@ public final class SystemProcessRunner: ProcessRunning, ProcessControlling, @unc
         do {
             try process.run()
         } catch {
-            throw MunkiPkgError.message("\(URL(fileURLWithPath: executable).lastPathComponent) execution failed: \(error.localizedDescription)")
+            throw SwiftPkgError.message("\(URL(fileURLWithPath: executable).lastPathComponent) execution failed: \(error.localizedDescription)")
+        }
+
+        // Drain stdout and stderr concurrently on background queues *before*
+        // waiting. Reading only after waitUntilExit() (or draining the pipes
+        // sequentially) deadlocks: a child that writes more than the ~64KB pipe
+        // buffer to either stream blocks on write(), never exits, and the wait
+        // hangs forever. Each field is written exactly once by its own closure;
+        // the parent reads the box only after group.wait(), so there is no
+        // concurrent mutation.
+        final class DataBox: @unchecked Sendable {
+            var stdout = Data()
+            var stderr = Data()
+        }
+        let box = DataBox()
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.stdout = stdout.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            box.stderr = stderr.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
         }
         process.waitUntilExit()
+        group.wait()
         return ProcessResult(
             status: process.terminationStatus,
-            stdout: stdout.fileHandleForReading.readDataToEndOfFile(),
-            stderr: stderr.fileHandleForReading.readDataToEndOfFile()
+            stdout: box.stdout,
+            stderr: box.stderr
         )
     }
 
@@ -138,6 +207,8 @@ enum ToolPaths {
     static let pkgutil = "/usr/sbin/pkgutil"
     static let productbuild = "/usr/bin/productbuild"
     static let xcrun = "/usr/bin/xcrun"
+    static let git = "/usr/bin/git"
+    static let spctl = "/usr/sbin/spctl"
 }
 
 extension FileManager {

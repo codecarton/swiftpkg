@@ -220,6 +220,42 @@ Only the trusted signing workflow creates the immutable GitHub Release. See
 [VERIFICATION.md](VERIFICATION.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [SECURITY.md](SECURITY.md) for project processes.
 
+## GitHub Action
+
+`action.yml` is a composite action so any repository can build a package on a
+macOS runner without hand-rolling install-and-invoke. It installs the swiftpkg
+release, optionally lints, builds with `--output-format json`, and exposes the
+result as step outputs.
+
+```yaml
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: pkg
+        uses: codecarton/swiftpkg@v1
+        with:
+          project-path: packages/my-project
+          version: ${{ github.ref_name }}
+          lint: true
+          verify: true
+      - run: echo "Built ${{ steps.pkg.outputs.pkg-path }} (${{ steps.pkg.outputs.sha256 }})"
+```
+
+Inputs: `project-path` (required), `version` (→ `--pkg-version`), `output-dir`,
+`swiftpkg-version`, `swiftpkg-sha256`, `expected-team-id`, `lint`, `verify`,
+`provenance`, `extra-args`. Outputs: `pkg-path`, `version`, `sha256`. Requires a
+swiftpkg release that includes the CI flags (`--output-format`, `--output-dir`,
+`--pkg-version`, `--lint`, `--verify`, `--provenance`).
+
+The action installs a release package as root, so it checks what it downloaded
+first: the asset must match the release's `SHA256SUMS` and must be signed by the
+`expected-team-id` Developer Team, and `spctl` must accept it. `swiftpkg-version`
+defaults to a pinned tag rather than `latest`. GitHub release assets can be
+replaced without moving the tag, so a build that must be reproducible byte for
+byte should also set `swiftpkg-sha256` to the checksum it expects.
+
 ## Marketing site
 
 The static marketing site lives in [`site/`](site/) and publishes to
