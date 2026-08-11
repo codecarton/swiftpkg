@@ -66,7 +66,7 @@ public struct PackageSettingsDraft: Equatable, Sendable {
             notarizationTeamID = ""
             notarizationPassword = ""
             notarizationKeychainProfile = profile
-        case nil, .invalid?:
+        case nil:
             notarizationMode = .none
             notarizationAppleID = ""
             notarizationTeamID = ""
@@ -83,14 +83,14 @@ public struct PackageSettingsDraft: Equatable, Sendable {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedVersion = version.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { throw SwiftPkgError.invalidConfiguration("Package name is required.") }
-        guard !trimmedIdentifier.isEmpty else { throw SwiftPkgError.invalidConfiguration("Package identifier is required.") }
-        guard !trimmedVersion.isEmpty else { throw SwiftPkgError.invalidConfiguration("Package version is required.") }
+        guard !trimmedName.isEmpty else { throw MunkiPkgError.invalidConfiguration("Package name is required.") }
+        guard !trimmedIdentifier.isEmpty else { throw MunkiPkgError.invalidConfiguration("Package identifier is required.") }
+        guard !trimmedVersion.isEmpty else { throw MunkiPkgError.invalidConfiguration("Package version is required.") }
 
         let signing: SigningConfiguration?
         if signingEnabled {
             let identity = signingIdentity.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !identity.isEmpty else { throw SwiftPkgError.invalidConfiguration("A signing identity is required when signing is enabled.") }
+            guard !identity.isEmpty else { throw MunkiPkgError.invalidConfiguration("A signing identity is required when signing is enabled.") }
             let usesTimestamp: Bool? = switch signingTimestampMode {
             case .automatic: nil
             case .enabled: true
@@ -115,16 +115,16 @@ public struct PackageSettingsDraft: Equatable, Sendable {
             notarization = nil
         case .keychainProfile:
             guard let profile = optional(notarizationKeychainProfile) else {
-                throw SwiftPkgError.invalidConfiguration("A keychain profile is required for notarization.")
+                throw MunkiPkgError.invalidConfiguration("A keychain profile is required for notarization.")
             }
-            guard staplingTimeout > 0 else { throw SwiftPkgError.invalidConfiguration("Stapling timeout must be greater than zero.") }
+            guard staplingTimeout > 0 else { throw MunkiPkgError.invalidConfiguration("Stapling timeout must be greater than zero.") }
             notarization = NotarizationConfiguration(authentication: .keychainProfile(profile), staplingTimeout: staplingTimeout)
         case .appleID:
             guard let appleID = optional(notarizationAppleID),
                   let teamID = optional(notarizationTeamID) else {
-                throw SwiftPkgError.invalidConfiguration("Apple ID and team ID are required for Apple ID notarization.")
+                throw MunkiPkgError.invalidConfiguration("Apple ID and team ID are required for Apple ID notarization.")
             }
-            guard staplingTimeout > 0 else { throw SwiftPkgError.invalidConfiguration("Stapling timeout must be greater than zero.") }
+            guard staplingTimeout > 0 else { throw MunkiPkgError.invalidConfiguration("Stapling timeout must be greater than zero.") }
             let password = optional(notarizationPassword) ?? ""
             notarization = NotarizationConfiguration(
                 authentication: .appleID(appleID: appleID, teamID: teamID, password: password),

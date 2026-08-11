@@ -44,20 +44,6 @@ struct CLITests {
         #expect(options.importPackage == "existing.pkg")
     }
 
-    @Test("accepts --skip-import as an ignored no-op and still builds")
-    func acceptsSkipImport() throws {
-        guard case .options(let options) = CLIParser.parse(["--skip-import", "Project"]) else {
-            Issue.record("Expected options result")
-            return
-        }
-        #expect(options.skipImport)
-        // The flag must not divert away from a normal build.
-        guard case .build = try #require(try CLICommand.resolve(from: options)) else {
-            Issue.record("Expected a build command")
-            return
-        }
-    }
-
     @Test("reports missing import argument")
     func reportsMissingImportArgument() {
         guard case .failure(let message) = CLIParser.parse(["--import"]) else {
@@ -109,7 +95,7 @@ struct CLITests {
     }
 
     private func parsedOptions(_ arguments: [String]) throws -> CLIOptions {
-        guard case let .options(options) = CLIParser.parse(arguments) else { throw SwiftPkgError.message("Expected CLI options") }
+        guard case let .options(options) = CLIParser.parse(arguments) else { throw MunkiPkgError.message("Expected CLI options") }
         return options
     }
 }

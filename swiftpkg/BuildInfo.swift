@@ -49,10 +49,6 @@ public struct NotarizationConfiguration: Sendable {
     public enum Authentication: Sendable {
         case appleID(appleID: String, teamID: String, password: String)
         case keychainProfile(String)
-        /// notarization_info was present but incomplete. Loading tolerates this
-        /// so `--skip-notarization` builds still succeed; the error surfaces only
-        /// if notarization is actually attempted.
-        case invalid(reason: String)
     }
 
     public let authentication: Authentication
@@ -102,7 +98,7 @@ public struct PackageConfiguration: Sendable {
     public static func defaults(for project: URL) -> PackageConfiguration {
         let baseName = project.lastPathComponent.replacingOccurrences(of: " ", with: "")
         return PackageConfiguration(
-            name: "\(baseName)-${version}.pkg", identifier: "org.swiftpkg.pkg.\(baseName)", version: "1.0",
+            name: "\(baseName)-${version}.pkg", identifier: "com.github.munki.pkg.\(baseName)", version: "1.0",
             ownership: .recommended, installLocation: "/", compression: nil, minimumOSVersion: nil,
             usesLargePayload: false, postInstallAction: .none, preservesExtendedAttributes: false,
             suppressesBundleRelocation: true, usesDistributionStyle: false, title: nil,
@@ -130,46 +126,13 @@ public struct PackageConfiguration: Sendable {
         notarization = try Self.notarizationConfiguration(in: values)
     }
 
-    /// Returns a copy with the version replaced, before `${version}` substitution.
-    public func withVersion(_ newVersion: String) -> PackageConfiguration {
-        PackageConfiguration(
-            name: name, identifier: identifier, version: newVersion, ownership: ownership,
-            installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
-            usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
-            preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
-            usesDistributionStyle: usesDistributionStyle, title: title, productIdentifier: productIdentifier,
-            signing: signing, notarization: notarization
-        )
-    }
-
-    /// Returns a copy with dynamic version tokens (${TIMESTAMP}/${DATE}/${DATETIME})
-    /// resolved in the version field, before `${version}` name substitution.
-    public func resolvingDynamicVersion(now: Date = Date()) -> PackageConfiguration {
-        let resolved = DynamicVersion.resolve(version, now: now)
-        guard resolved != version else { return self }
-        return PackageConfiguration(
-            name: name, identifier: identifier, version: resolved, ownership: ownership,
-            installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
-            usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
-            preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
-            usesDistributionStyle: usesDistributionStyle, title: title, productIdentifier: productIdentifier,
-            signing: signing, notarization: notarization
-        )
-    }
-
     /// Returns a copy with `${version}` substituted in user-facing name fields.
-    /// The resolved package name is normalized to end in `.pkg`: build-info may
-    /// set `name` without the extension (e.g. `MunkiBootstrap`), and munki-pkg
-    /// writes the artifact as `<name>.pkg`, so swiftpkg does too — otherwise the
-    /// output is extensionless and `find '*.pkg'`/munkiimport miss it.
     public func substitutingVersion() -> PackageConfiguration {
         func replacingVersion(in value: String?) -> String? {
             value?.replacingOccurrences(of: "${version}", with: version)
         }
-        let resolvedName = replacingVersion(in: name)!
-        let normalizedName = resolvedName.hasSuffix(".pkg") ? resolvedName : "\(resolvedName).pkg"
         return PackageConfiguration(
-            name: normalizedName, identifier: identifier, version: version, ownership: ownership,
+            name: replacingVersion(in: name)!, identifier: identifier, version: version, ownership: ownership,
             installLocation: installLocation, compression: compression, minimumOSVersion: minimumOSVersion,
             usesLargePayload: usesLargePayload, postInstallAction: postInstallAction,
             preservesExtendedAttributes: preservesExtendedAttributes, suppressesBundleRelocation: suppressesBundleRelocation,
@@ -198,38 +161,38 @@ public struct PackageConfiguration: Sendable {
 
     private static func stringValue(for key: String, in values: [String: Any]) throws -> String? {
         guard let value = values[key] else { return nil }
-        guard let string = scalarString(value) else { throw SwiftPkgError.invalidConfiguration("build-info key '\(key)' must be a string") }
+        guard let string = scalarString(value) else { throw MunkiPkgError.invalidConfiguration("build-info key '\(key)' must be a string") }
         return string
     }
 
     private static func boolValue(for key: String, in values: [String: Any]) throws -> Bool? {
         guard let value = values[key] else { return nil }
-        guard let bool = value as? Bool else { throw SwiftPkgError.invalidConfiguration("build-info key '\(key)' must be a Boolean") }
+        guard let bool = value as? Bool else { throw MunkiPkgError.invalidConfiguration("build-info key '\(key)' must be a Boolean") }
         return bool
     }
 
     private static func enumValue<T: RawRepresentable>(_ type: T.Type, key: String, values: [String: Any]) throws -> T? where T.RawValue == String {
         guard let string = try stringValue(for: key, in: values) else { return nil }
-        guard let value = T(rawValue: string) else { throw SwiftPkgError.invalidConfiguration("build-info key '\(key)' has illegal value: \(string)") }
+        guard let value = T(rawValue: string) else { throw MunkiPkgError.invalidConfiguration("build-info key '\(key)' has illegal value: \(string)") }
         return value
     }
 
     private static func signingConfiguration(in values: [String: Any]) throws -> SigningConfiguration? {
         guard let value = values["signing_info"] else { return nil }
         guard let signing = value as? [String: Any], let identity = signing["identity"] as? String else {
-            throw SwiftPkgError.invalidConfiguration("signing_info must contain a string identity")
+            throw MunkiPkgError.invalidConfiguration("signing_info must contain a string identity")
         }
         let certificates: [String]
         if let certificate = signing["additional_cert_names"] as? String { certificates = [certificate] }
         else if let values = signing["additional_cert_names"] as? [String] { certificates = values }
         else if signing["additional_cert_names"] == nil { certificates = [] }
-        else { throw SwiftPkgError.invalidConfiguration("signing_info additional_cert_names must be a string or string array") }
+        else { throw MunkiPkgError.invalidConfiguration("signing_info additional_cert_names must be a string or string array") }
         return SigningConfiguration(identity: identity, keychain: signing["keychain"] as? String, additionalCertificateNames: certificates, usesTimestamp: signing["timestamp"] as? Bool)
     }
 
     private static func notarizationConfiguration(in values: [String: Any]) throws -> NotarizationConfiguration? {
         guard let value = values["notarization_info"] else { return nil }
-        guard let notary = value as? [String: Any] else { throw SwiftPkgError.invalidConfiguration("notarization_info must be a dictionary") }
+        guard let notary = value as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("notarization_info must be a dictionary") }
         let authentication: NotarizationConfiguration.Authentication
         if let appleID = notary["apple_id"] as? String, let teamID = notary["team_id"] as? String {
             let password = notary["password"] as? String ?? ""
@@ -237,10 +200,7 @@ public struct PackageConfiguration: Sendable {
         } else if let profile = notary["keychain_profile"] as? String {
             authentication = .keychainProfile(profile)
         } else {
-            // Tolerate incomplete notarization_info at load time so
-            // --skip-notarization builds succeed. munki-pkg defers this check to
-            // the point notarization actually runs; so does swiftpkg.
-            authentication = .invalid(reason: "notarization_info must specify apple_id + team_id or keychain_profile")
+            throw MunkiPkgError.invalidConfiguration("notarization_info must specify apple_id + team_id or keychain_profile")
         }
         let timeout = (notary["staple_timeout"] as? NSNumber)?.intValue ?? 300
         return NotarizationConfiguration(authentication: authentication, staplingTimeout: timeout)
@@ -265,7 +225,6 @@ private extension NotarizationConfiguration {
         case let .appleID(appleID, teamID, password):
             values.merge(["apple_id": appleID, "team_id": teamID, "password": password]) { _, new in new }
         case let .keychainProfile(profile): values["keychain_profile"] = profile
-        case .invalid: break
         }
         return values
     }
@@ -273,11 +232,9 @@ private extension NotarizationConfiguration {
 
 /// Loads and saves package configuration files in plist, JSON, or YAML form.
 public enum BuildInfoStore {
-    public static func load(from project: URL, requestedFormat: BuildInfoFormat?, versionOverride: String? = nil, fileManager: FileManager = .default) throws -> PackageConfiguration {
+    public static func load(from project: URL, requestedFormat: BuildInfoFormat?, fileManager: FileManager = .default) throws -> PackageConfiguration {
         let document = try discover(in: project, requestedFormat: requestedFormat, fileManager: fileManager)
-        let template = try loadTemplate(from: document.url, defaultsFor: project)
-        let versioned = versionOverride.map(template.withVersion) ?? template
-        return versioned.resolvingDynamicVersion().substitutingVersion()
+        return try loadTemplate(from: document.url, defaultsFor: project).substitutingVersion()
     }
 
     public static func loadTemplate(from project: URL, requestedFormat: BuildInfoFormat? = nil, fileManager: FileManager = .default) throws -> PackageConfiguration {
@@ -295,8 +252,8 @@ public enum BuildInfoStore {
             case .json: object = try JSONSerialization.jsonObject(with: data)
             case .yaml, .yml: object = try Yams.load(yaml: String(decoding: data, as: UTF8.self)) as Any
             }
-        } catch { throw SwiftPkgError.invalidConfiguration("\(url.path) is not a valid \(format.rawValue) file: \(error.localizedDescription)") }
-        guard let values = object as? [String: Any] else { throw SwiftPkgError.invalidConfiguration("\(url.path) must contain a dictionary") }
+        } catch { throw MunkiPkgError.invalidConfiguration("\(url.path) is not a valid \(format.rawValue) file: \(error.localizedDescription)") }
+        guard let values = object as? [String: Any] else { throw MunkiPkgError.invalidConfiguration("\(url.path) must contain a dictionary") }
         return try PackageConfiguration(values: values, defaults: .defaults(for: project))
     }
 
@@ -318,19 +275,19 @@ public enum BuildInfoStore {
     public static func discover(in project: URL, requestedFormat: BuildInfoFormat? = nil, fileManager: FileManager = .default) throws -> BuildInfoDocument {
         if let requestedFormat {
             let url = project.appendingPathComponent("build-info").appendingPathExtension(requestedFormat.rawValue)
-            guard fileManager.itemExists(at: url) else { throw SwiftPkgError.invalidConfiguration("No build-info file found!") }
+            guard fileManager.itemExists(at: url) else { throw MunkiPkgError.invalidConfiguration("No build-info file found!") }
             return BuildInfoDocument(url: url, format: requestedFormat)
         }
         let baseURL = project.appendingPathComponent("build-info")
         let formats = BuildInfoFormat.allCases.filter { fileManager.itemExists(at: baseURL.appendingPathExtension($0.rawValue)) }
-        guard formats.count <= 1 else { throw SwiftPkgError.invalidConfiguration("Multiple build-info files found!") }
-        guard let format = formats.first else { throw SwiftPkgError.invalidConfiguration("No build-info file found!") }
+        guard formats.count <= 1 else { throw MunkiPkgError.invalidConfiguration("Multiple build-info files found!") }
+        guard let format = formats.first else { throw MunkiPkgError.invalidConfiguration("No build-info file found!") }
         return BuildInfoDocument(url: baseURL.appendingPathExtension(format.rawValue), format: format)
     }
 
     private static func format(for url: URL) throws -> BuildInfoFormat {
         guard let format = BuildInfoFormat(rawValue: url.pathExtension.lowercased()) else {
-            throw SwiftPkgError.invalidConfiguration("Unsupported build-info format: \(url.pathExtension)")
+            throw MunkiPkgError.invalidConfiguration("Unsupported build-info format: \(url.pathExtension)")
         }
         return format
     }

@@ -283,7 +283,7 @@ final class ProjectEditorModel {
 
     private func saveDraft() throws {
         guard let projectURL, let document = buildInfoDocument else {
-            throw SwiftPkgError.message("No project is open.")
+            throw MunkiPkgError.message("No project is open.")
         }
         let configuration = try draft.validatedConfiguration()
         try BuildInfoStore.write(configuration, to: projectURL, format: document.format)
