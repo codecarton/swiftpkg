@@ -18,14 +18,14 @@ public struct ProjectCreator {
         configuration: PackageConfiguration? = nil
     ) throws {
         if fileManager.itemExists(at: project), !force {
-            throw SwiftPkgError.projectExists("\(project.path) already exists! Use --force to convert it to a project directory.")
+            throw MunkiPkgError.message("\(project.path) already exists! Use --force to convert it to a project directory.")
         }
         if !fileManager.itemExists(at: project) {
             try fileManager.createDirectory(at: project, withIntermediateDirectories: false)
         }
         for directoryName in ["payload", "scripts", "build"] {
             let directory = project.appendingPathComponent(directoryName, isDirectory: true)
-            guard !fileManager.itemExists(at: directory) else { throw SwiftPkgError.projectExists("\(directory.path) already exists") }
+            guard !fileManager.itemExists(at: directory) else { throw MunkiPkgError.message("\(directory.path) already exists") }
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
         }
         try BuildInfoStore.write(configuration ?? .defaults(for: project), to: project, format: format)
@@ -49,7 +49,7 @@ public struct BOMMetadataService {
     public func exportMetadata(from bom: URL, to project: URL) throws {
         let result = try runner.run(executable: ToolPaths.lsbom, arguments: [bom.path])
         guard result.status == 0 else {
-            throw SwiftPkgError.processFailed(tool: "lsbom", message: result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines))
+            throw MunkiPkgError.processFailed(tool: "lsbom", message: result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         try result.stdout.write(to: project.appendingPathComponent("Bom.txt"), options: .atomic)
     }
@@ -66,7 +66,7 @@ public struct BOMMetadataService {
     public func synchronizeMetadataFromBOM(in project: URL, requestedFormat: BuildInfoFormat?) throws {
         let bom = project.appendingPathComponent("Bom.txt")
         let payload = project.appendingPathComponent("payload", isDirectory: true)
-        guard fileManager.itemExists(at: bom) else { throw SwiftPkgError.message("Can't sync with bom info: no Bom.txt found in project directory.") }
+        guard fileManager.itemExists(at: bom) else { throw MunkiPkgError.message("Can't sync with bom info: no Bom.txt found in project directory.") }
         let packageConfiguration = (try? BuildInfoStore.load(from: project, requestedFormat: requestedFormat)) ?? .defaults(for: project)
         let isRoot = geteuid() == 0
         if packageConfiguration.ownership != .recommended, !isRoot {
@@ -97,7 +97,7 @@ public struct BOMMetadataService {
                 changes += 1
                 continue
             } else {
-                throw SwiftPkgError.message("File \(target.path) is missing in payload")
+                throw MunkiPkgError.message("File \(target.path) is missing in payload")
             }
             if isRoot, fileStatus.st_uid != metadata.owner || fileStatus.st_gid != metadata.group {
                 console.display("Changing user/group of \(target.path) to \(metadata.owner)/\(metadata.group)")
@@ -135,12 +135,12 @@ private struct BOMEntry {
 
     init(parsing line: String, lineNumber: Int) throws {
         let fields = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-        guard fields.count >= 3 else { throw SwiftPkgError.message("Malformed Bom.txt row \(lineNumber): expected path, mode, and owner/group") }
+        guard fields.count >= 3 else { throw MunkiPkgError.message("Malformed Bom.txt row \(lineNumber): expected path, mode, and owner/group") }
         var path = fields[0]
         if path.hasPrefix("./") { path.removeFirst(2) }
         let ownerGroup = fields[2].split(separator: "/", omittingEmptySubsequences: false)
         guard ownerGroup.count == 2, let owner = uid_t(ownerGroup[0]), let group = gid_t(ownerGroup[1]), let mode = mode_t(String(fields[1].suffix(4)), radix: 8) else {
-            throw SwiftPkgError.message("Malformed Bom.txt metadata on row \(lineNumber)")
+            throw MunkiPkgError.message("Malformed Bom.txt metadata on row \(lineNumber)")
         }
         relativePath = path
         self.mode = mode
@@ -150,6 +150,6 @@ private struct BOMEntry {
     }
 }
 
-private func posixError(_ action: String, path: String) -> SwiftPkgError {
+private func posixError(_ action: String, path: String) -> MunkiPkgError {
     .message("\(action) for \(path): \(String(cString: strerror(errno)))")
 }
