@@ -48,22 +48,9 @@
 		A10000000000000000000004 /* Swiftpkgr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Swiftpkgr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		9EDD37C7300B19C600577931 /* Exceptions for "swiftpkg" folder in "Swiftpkgr" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				AppIcon.icon,
-			);
-			target = A10000000000000000000032 /* Swiftpkgr */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9E13F86B3004711C000A60D7 /* swiftpkg */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				9EDD37C7300B19C600577931 /* Exceptions for "swiftpkg" folder in "Swiftpkgr" target */,
-			);
 			path = swiftpkg;
 			sourceTree = "<group>";
 		};
