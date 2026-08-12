@@ -7,19 +7,19 @@ struct ExitCodeTests {
 
     @Test("each error class maps to its documented exit code")
     func errorExitCodes() {
-        #expect(MunkiPkgError.message("x").exitCode == 1)
-        #expect(MunkiPkgError.projectExists("x").exitCode == 2)
-        #expect(MunkiPkgError.invalidConfiguration("x").exitCode == 3)
-        #expect(MunkiPkgError.importFailed("x").exitCode == 4)
-        #expect(MunkiPkgError.processFailed(tool: "t", message: "m").exitCode == 5)
-        #expect(MunkiPkgError.notarizationFailed("x").exitCode == 7)
+        #expect(SwiftPkgError.message("x").exitCode == 1)
+        #expect(SwiftPkgError.projectExists("x").exitCode == 2)
+        #expect(SwiftPkgError.invalidConfiguration("x").exitCode == 3)
+        #expect(SwiftPkgError.importFailed("x").exitCode == 4)
+        #expect(SwiftPkgError.processFailed(tool: "t", message: "m").exitCode == 5)
+        #expect(SwiftPkgError.notarizationFailed("x").exitCode == 7)
     }
 
     @Test("unknown errors default to exit 1")
     func unknownErrorDefault() {
         struct Other: Error {}
         #expect(exitCode(for: Other()) == 1)
-        #expect(exitCode(for: MunkiPkgError.notarizationFailed("x")) == 7)
+        #expect(exitCode(for: SwiftPkgError.notarizationFailed("x")) == 7)
     }
 
     // End-to-end through the CLI entry point.

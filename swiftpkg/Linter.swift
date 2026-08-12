@@ -29,16 +29,16 @@ public struct Linter {
     /// (missing directory / undecodable build-info), which is itself a failure.
     public func lint(project: URL, requestedFormat: BuildInfoFormat?) throws -> [LintFinding] {
         guard fileManager.directoryExists(at: project) else {
-            throw MunkiPkgError.message("\(project.path): Project not found.")
+            throw SwiftPkgError.message("\(project.path): Project not found.")
         }
         var findings: [LintFinding] = []
 
-        // Decoding failures throw MunkiPkgError; surface them as a lint error
+        // Decoding failures throw SwiftPkgError; surface them as a lint error
         // rather than a crash so `--lint` always produces a report.
         let configuration: PackageConfiguration
         do {
             configuration = try BuildInfoStore.load(from: project, requestedFormat: requestedFormat)
-        } catch let error as MunkiPkgError {
+        } catch let error as SwiftPkgError {
             return [LintFinding(.error, error.description)]
         }
 

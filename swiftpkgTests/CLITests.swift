@@ -109,7 +109,7 @@ struct CLITests {
     }
 
     private func parsedOptions(_ arguments: [String]) throws -> CLIOptions {
-        guard case let .options(options) = CLIParser.parse(arguments) else { throw MunkiPkgError.message("Expected CLI options") }
+        guard case let .options(options) = CLIParser.parse(arguments) else { throw SwiftPkgError.message("Expected CLI options") }
         return options
     }
 }

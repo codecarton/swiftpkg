@@ -14,7 +14,7 @@ struct PackageNameValidationTests {
         "",
     ])
     func rejectsUnsafeNames(_ name: String) {
-        #expect(throws: MunkiPkgError.self) {
+        #expect(throws: SwiftPkgError.self) {
             try PackageBuildCoordinator.validatePackageName(name)
         }
     }
@@ -45,7 +45,7 @@ struct PackageNameValidationTests {
 
         let runner = RecordingRunner()
         let coordinator = PackageBuildCoordinator(fileManager: .default, runner: runner, console: makeConsole())
-        await #expect(throws: MunkiPkgError.self) {
+        await #expect(throws: SwiftPkgError.self) {
             try await coordinator.buildPackage(in: project, configuration: PackageBuildOptions())
         }
         #expect(runner.calls.isEmpty)

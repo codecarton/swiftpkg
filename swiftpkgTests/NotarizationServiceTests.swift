@@ -32,7 +32,7 @@ struct NotarizationServiceTests {
     func timeoutThrows() async throws {
         let runner = ScriptedRunner([try plistResult(["id": "submission-abc"])])
         let configuration = NotarizationConfiguration(authentication: .keychainProfile("profile"), staplingTimeout: 0)
-        await #expect(throws: MunkiPkgError.self) {
+        await #expect(throws: SwiftPkgError.self) {
             try await NotarizationService(runner: runner, console: Console(quiet: true))
                 .notarize(package: URL(fileURLWithPath: "/tmp/does-not-matter.pkg"), configuration: configuration, skipsStapling: false)
         }
