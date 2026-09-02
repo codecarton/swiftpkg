@@ -33,4 +33,7 @@ swift test
 ./scripts/verify-loop.sh
 ```
 
-By contributing, you agree that your contribution is licensed under GPL-3.0-or-later.
+By contributing to the project for inclusion in version 0.4.0 or later, you
+agree that your contribution is licensed under the Apache License 2.0. See
+[LICENSE](LICENSE) and [NOTICE](NOTICE). Previously published releases remain
+under the license under which they were distributed.

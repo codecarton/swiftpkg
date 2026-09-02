@@ -66,6 +66,7 @@ fi
 rm -rf "$DIST"
 mkdir -p "$DIST/pkgroot/usr/local/bin"
 install -m 755 "$BIN" "$DIST/pkgroot/usr/local/bin/swiftpkg"
+"$ROOT/scripts/stage-license-docs.sh" "$DIST/pkgroot/usr/local/share/doc/swiftpkg"
 PKG="$DIST/swiftpkg-$VERSION-universal.pkg"
 if [ "$UNSIGNED" = 1 ]; then
     /usr/bin/pkgbuild --root "$DIST/pkgroot" --identifier org.swiftpkg.cli --version "$VERSION" \
@@ -79,6 +80,14 @@ else
     /usr/sbin/pkgutil --check-signature "$PKG"
     /usr/sbin/spctl --assess --type install --verbose=4 "$PKG"
 fi
+PAYLOAD="$WORK/pkg-payload.txt"
+/usr/sbin/pkgutil --payload-files "$PKG" | sed 's|^\./||' > "$PAYLOAD"
+for DOCUMENT in LICENSE NOTICE RELICENSE.md; do
+    grep -Fxq "usr/local/share/doc/swiftpkg/$DOCUMENT" "$PAYLOAD" || {
+        echo "release package is missing $DOCUMENT" >&2
+        exit 1
+    }
+done
 (cd "$DIST" && shasum -a 256 "$(basename "$PKG")" > SHA256SUMS)
 
 if [ "$GH_PUBLISH" = 1 ]; then

@@ -1,0 +1,68 @@
+swiftpkg third-party attributions
+
+Project-owned material in swiftpkg version 0.4.0 and later is licensed under
+the Apache License, Version 2.0. Previously published releases remain under
+the license under which they were distributed. See LICENSE and
+RELICENSE.md for the rights review and effective scope.
+
+munki-pkg
+---------
+
+swiftpkg follows the package-project workflow and maintains compatibility with
+the Apache-2.0-licensed munki-pkg project:
+
+https://github.com/munki/munki-pkg
+https://github.com/munki/munki-pkg/blob/main/LICENSE.md
+
+Swift Argument Parser
+---------------------
+
+swiftpkg depends on Swift Argument Parser 1.8.2. It is licensed under the
+Apache License, Version 2.0, with the Runtime Library Exception:
+
+Copyright (c) 2020 Apple Inc. and the Swift project authors.
+
+Runtime Library Exception to the Apache 2.0 License:
+
+As an exception, if you use this Software to compile your source code and
+portions of this Software are embedded into the binary product as a result,
+you may redistribute such product without providing attribution as would
+otherwise be required by Sections 4(a), 4(b) and 4(d) of the License.
+
+https://github.com/apple/swift-argument-parser
+https://github.com/apple/swift-argument-parser/blob/main/LICENSE.txt
+
+Yams and libYAML
+----------------
+
+swiftpkg depends on Yams 6.2.2. Yams and its bundled libYAML are MIT licensed.
+The upstream notice is:
+
+The MIT License (MIT)
+
+Copyright (c) 2016 JP Simard.
+Copyright (c) 2017-2020 Ingy döt Net
+Copyright (c) 2006-2016 Kirill Simonov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The upstream project and license are also available here:
+
+https://github.com/jpsim/Yams
+https://github.com/jpsim/Yams/blob/main/LICENSE
