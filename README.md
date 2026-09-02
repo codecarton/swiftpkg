@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/codecarton/swiftpkg/actions/workflows/ci.yml/badge.svg)](https://github.com/codecarton/swiftpkg/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/codecarton/swiftpkg?display_name=release&sort=semver)](https://github.com/codecarton/swiftpkg/releases)
-[![License](https://img.shields.io/github/license/codecarton/swiftpkg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/github/license/codecarton/swiftpkg)](LICENSE)
 [![CLI macOS 13+](https://img.shields.io/badge/CLI-macOS%2013%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
 [![Swiftpkgr macOS 15+](https://img.shields.io/badge/Swiftpkgr-macOS%2015%2B-000000?logo=apple&logoColor=white)](https://support.apple.com/macos)
 
@@ -189,7 +189,10 @@ swift test
 ```
 
 The Swift Package Manager dependency [Yams](https://github.com/jpsim/Yams)
-provides YAML support. Both products also build through Xcode:
+provides YAML support. The CLI also uses
+[Swift Argument Parser](https://github.com/apple/swift-argument-parser). Their
+licenses and the upstream munki-pkg attribution are listed in
+[NOTICE](NOTICE). Both products also build through Xcode:
 
 ```sh
 xcodebuild -project swiftpkg.xcodeproj -scheme swiftpkg -configuration Release build
@@ -286,4 +289,10 @@ site** workflow once. Future changes to `site/` on `main` deploy automatically.
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+Starting with version 0.4.0, project-owned swiftpkg source code, documentation,
+website, and assets are licensed under the Apache License 2.0. See
+[LICENSE](LICENSE), [NOTICE](NOTICE), and the
+[0.4.0 relicensing record](RELICENSE.md).
+
+Previously published releases, including 0.3.1, remain under
+GPL-3.0-or-later, the license under which they were distributed.

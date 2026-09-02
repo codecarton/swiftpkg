@@ -49,3 +49,11 @@ and staples the final installer using this project's settings.
 After validation, the script pushes `main`, explicitly pushes the
 `v<version>` tag, and creates or updates the corresponding GitHub Release with
 all installer and Homebrew artifacts plus `SHA256SUMS`.
+
+## License
+
+For the 0.4.0 release and later, project-owned swiftpkg material is licensed
+under the Apache License 2.0. Previously published releases remain under the
+license under which they were distributed. See the repository root's
+[`LICENSE`](../../LICENSE), [`NOTICE`](../../NOTICE), and
+[`RELICENSE.md`](../../RELICENSE.md).
