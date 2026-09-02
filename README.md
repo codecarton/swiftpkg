@@ -139,6 +139,27 @@ Useful options:
 --version              Show the tool version
 ```
 
+### Exit codes
+
+The CLI returns a stable status for each supported outcome:
+
+| Status | Meaning |
+| ---: | --- |
+| 0 | Success |
+| 1 | General or unclassified failure |
+| 2 | Project already exists |
+| 3 | Invalid configuration |
+| 4 | Package import failure |
+| 5 | Package build or subprocess failure |
+| 6 | Package signing failure |
+| 7 | Package notarization failure |
+| 64 | Command-line usage error (`EX_USAGE`) |
+
+This is an intentional compatibility change from historical releases, which
+returned `255` for every failure. Callers that only test for a nonzero status
+continue to work; callers that matched `255` must use the failure-specific
+statuses above.
+
 ## Project layout
 
 ```text

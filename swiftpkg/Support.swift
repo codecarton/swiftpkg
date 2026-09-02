@@ -7,6 +7,7 @@ public enum SwiftPkgError: Error, CustomStringConvertible, LocalizedError {
     case processFailed(tool: String, message: String)
     case projectExists(String)
     case importFailed(String)
+    case signingFailed(tool: String, message: String)
     case notarizationFailed(String)
 
     public var description: String {
@@ -17,15 +18,17 @@ public enum SwiftPkgError: Error, CustomStringConvertible, LocalizedError {
              let .importFailed(value),
              let .notarizationFailed(value):
             value
-        case let .processFailed(tool, message): "\(tool): \(message)"
+        case let .processFailed(tool, message),
+             let .signingFailed(tool, message):
+            "\(tool): \(message)"
         }
     }
 
     public var errorDescription: String? { description }
 
     /// Process exit code for this error class. `0` is reserved for success and
-    /// `64` (EX_USAGE) for command-line usage errors; `6` is reserved for a
-    /// future dedicated signing-failure class. See the README exit-code table.
+    /// `64` (EX_USAGE) for command-line usage errors. See the README exit-code
+    /// table for the public contract.
     public var exitCode: Int32 {
         switch self {
         case .message: 1
@@ -33,6 +36,7 @@ public enum SwiftPkgError: Error, CustomStringConvertible, LocalizedError {
         case .invalidConfiguration: 3
         case .importFailed: 4
         case .processFailed: 5
+        case .signingFailed: 6
         case .notarizationFailed: 7
         }
     }
@@ -206,6 +210,7 @@ enum ToolPaths {
     static let pkgbuild = "/usr/bin/pkgbuild"
     static let pkgutil = "/usr/sbin/pkgutil"
     static let productbuild = "/usr/bin/productbuild"
+    static let productsign = "/usr/bin/productsign"
     static let xcrun = "/usr/bin/xcrun"
     static let git = "/usr/bin/git"
     static let spctl = "/usr/sbin/spctl"

@@ -238,6 +238,12 @@ private struct ComponentPackageBuilder {
         let packageInfo = context.temporaryDirectory.appendingPathComponent("PackageInfo")
         try writePackageInfo(for: context.configuration, to: packageInfo)
         try fileManager.removeIfPresent(at: context.output)
+        let signing = !context.configuration.usesDistributionStyle && !skipsSigning
+            ? context.configuration.signing
+            : nil
+        let buildOutput = signing == nil
+            ? context.output
+            : context.temporaryDirectory.appendingPathComponent("Unsigned-\(context.configuration.name)")
         var arguments = ["--ownership", context.configuration.ownership.rawValue, "--identifier", context.configuration.identifier, "--version", context.configuration.version, "--info", packageInfo.path]
         if let payload = context.layout.payload {
             arguments += ["--root", payload.path]
@@ -252,9 +258,12 @@ private struct ComponentPackageBuilder {
         if context.configuration.usesLargePayload { arguments.append("--large-payload") }
         if let scripts = context.effectiveScripts { arguments += ["--scripts", scripts.path] }
         if isQuiet { arguments.append("--quiet") }
-        if !context.configuration.usesDistributionStyle, !skipsSigning { appendSigningArguments(&arguments, signing: context.configuration.signing) }
-        arguments.append(context.output.path)
+        arguments.append(buildOutput.path)
         try runner.runSuccessfully(executable: ToolPaths.pkgbuild, arguments: arguments, failureMessage: "Package creation failed.")
+        if let signing {
+            console.display("Signing component package")
+            try signPackage(at: buildOutput, to: context.output, signing: signing, runner: runner)
+        }
     }
 
     private func writePackageInfo(for configuration: PackageConfiguration, to url: URL) throws {
@@ -288,23 +297,30 @@ private struct DistributionPackageBuilder {
     let console: Console
 
     func buildDistribution(using context: PackageBuildContext, isQuiet: Bool, skipsSigning: Bool) throws {
-        let temporaryOutput = context.layout.buildDirectory.appendingPathComponent("Dist-\(context.configuration.name)")
-        try fileManager.removeIfPresent(at: temporaryOutput)
+        let unsignedOutput = context.temporaryDirectory.appendingPathComponent("Unsigned-\(context.configuration.name)")
         let distribution = context.temporaryDirectory.appendingPathComponent("Distribution")
         let title = context.configuration.title ?? context.configuration.name
         let xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><installer-gui-script minSpecVersion=\"1\"><title>\(xmlEscaped(title))</title><options customize=\"never\" require-scripts=\"false\" hostArchitectures=\"arm64,x86_64\"/><choices-outline><line choice=\"default\"/></choices-outline><choice id=\"default\" visible=\"false\"><pkg-ref id=\"default\"/></choice><pkg-ref id=\"default\">\(xmlEscaped(context.configuration.name))</pkg-ref></installer-gui-script>"
         try Data(xml.utf8).write(to: distribution)
         var arguments = ["--distribution", distribution.path, "--package-path", context.layout.buildDirectory.path]
         if isQuiet { arguments.append("--quiet") }
-        if !skipsSigning { appendSigningArguments(&arguments, signing: context.configuration.signing) }
         let requirements = context.layout.project.appendingPathComponent("product-requirements.plist")
         if fileManager.itemExists(at: requirements) { arguments += ["--product", requirements.path] }
-        arguments += ["--identifier", context.configuration.productIdentifier ?? context.configuration.identifier, "--version", context.configuration.version, temporaryOutput.path]
+        arguments += ["--identifier", context.configuration.productIdentifier ?? context.configuration.identifier, "--version", context.configuration.version, unsignedOutput.path]
         try runner.runSuccessfully(executable: ToolPaths.productbuild, arguments: arguments, failureMessage: "Distribution package creation failed.")
+        let finalOutput: URL
+        if let signing = skipsSigning ? nil : context.configuration.signing {
+            console.display("Signing distribution package")
+            let signedOutput = context.temporaryDirectory.appendingPathComponent("Signed-\(context.configuration.name)")
+            try signPackage(at: unsignedOutput, to: signedOutput, signing: signing, runner: runner)
+            finalOutput = signedOutput
+        } else {
+            finalOutput = unsignedOutput
+        }
         console.display("Removing component package \(context.output.path)")
         try fileManager.removeItem(at: context.output)
-        console.display("Renaming distribution package \(temporaryOutput.path) to \(context.output.path)")
-        try fileManager.moveItem(at: temporaryOutput, to: context.output)
+        console.display("Renaming distribution package \(finalOutput.path) to \(context.output.path)")
+        try fileManager.moveItem(at: finalOutput, to: context.output)
     }
 }
 
@@ -336,7 +352,11 @@ struct NotarizationService: Sendable {
         let accepted = try await waitForAcceptance(identifier, configuration: configuration)
         guard accepted, !skipsStapling else { return Outcome(accepted: accepted, stapled: false) }
         console.display("Stapling package")
-        try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
+        do {
+            try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
+        } catch {
+            throw SwiftPkgError.notarizationFailed(String(describing: error))
+        }
         console.display("The staple and validate action worked!")
         return Outcome(accepted: true, stapled: true)
     }
@@ -396,12 +416,31 @@ struct NotarizationService: Sendable {
     }
 }
 
-private func appendSigningArguments(_ arguments: inout [String], signing: SigningConfiguration?) {
-    guard let signing else { return }
+private func appendSigningArguments(_ arguments: inout [String], signing: SigningConfiguration) {
     arguments += ["--sign", signing.identity]
     if let keychain = signing.keychain { arguments += ["--keychain", expandKeychainPath(keychain)] }
     for certificate in signing.additionalCertificateNames { arguments += ["--cert", certificate] }
     if let usesTimestamp = signing.usesTimestamp { arguments.append(usesTimestamp ? "--timestamp" : "--timestamp=none") }
+}
+
+/// Signs an already-built package as a distinct stage so signing and package
+/// construction failures retain separate public exit codes.
+private func signPackage(
+    at unsignedPackage: URL,
+    to signedPackage: URL,
+    signing: SigningConfiguration,
+    runner: any ProcessRunning
+) throws {
+    var arguments: [String] = []
+    appendSigningArguments(&arguments, signing: signing)
+    arguments += [unsignedPackage.path, signedPackage.path]
+    do {
+        try runner.runSuccessfully(executable: ToolPaths.productsign, arguments: arguments, failureMessage: "Package signing failed.")
+    } catch let SwiftPkgError.processFailed(tool, message) {
+        throw SwiftPkgError.signingFailed(tool: tool, message: message)
+    } catch {
+        throw SwiftPkgError.signingFailed(tool: "productsign", message: String(describing: error))
+    }
 }
 
 /// Expands `${HOME}` and a leading tilde in a build-info keychain path so that
