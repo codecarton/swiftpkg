@@ -152,17 +152,31 @@ struct PackageVerifier {
 /// Captures the attributes of a `PackageInfo`'s root `pkg-info` element.
 private final class PackageInfoAttributes: NSObject, XMLParserDelegate {
     private(set) var pkgInfo: [String: String]?
+    private var rootElementName: String?
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-        if elementName == "pkg-info", pkgInfo == nil { pkgInfo = attributeDict }
+        if rootElementName == nil { rootElementName = elementName }
+        if rootElementName == "pkg-info", elementName == "pkg-info", pkgInfo == nil {
+            pkgInfo = attributeDict
+        }
     }
 }
 
 /// Captures the product identifier and version from a distribution document.
 private final class DistributionProductAttributes: NSObject, XMLParserDelegate {
     private(set) var product: [String: String]?
+    private var rootElementName: String?
+    private var elementDepth = 0
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-        if elementName == "product", product == nil { product = attributeDict }
+        elementDepth += 1
+        if elementDepth == 1 { rootElementName = elementName }
+        if elementDepth == 2, rootElementName == "installer-gui-script", elementName == "product", product == nil {
+            product = attributeDict
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        elementDepth -= 1
     }
 }

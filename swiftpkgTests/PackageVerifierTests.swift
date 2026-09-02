@@ -146,6 +146,12 @@ struct PackageVerifierTests {
         #expect(message?.contains("pkg-info") == true)
     }
 
+    @Test("a pkg-info element nested below another root is rejected")
+    func nestedPackageInfoIsRejected() {
+        let wrapped = #"<wrapper><pkg-info identifier="com.example.app" version="1.0"/></wrapper>"#
+        #expect(PackageVerifier.metadataMismatch(expectedIdentifier: "com.example.app", expectedVersion: "1.0", packageInfoXML: wrapped) != nil)
+    }
+
     @Test("missing expanded PackageInfo fails verification")
     func missingPackageInfoFailsVerification() throws {
         let (temp, package) = try makePackage(); defer { temp.remove() }
@@ -183,6 +189,18 @@ struct PackageVerifierTests {
     func missingDistributionProductIsRejected() {
         let message = PackageVerifier.distributionMetadataMismatch(expectedIdentifier: "com.example.app", expectedVersion: "1.0", distributionXML: "<installer-gui-script/>")
         #expect(message?.contains("product") == true)
+    }
+
+    @Test("a product below an unexpected distribution root is rejected")
+    func nestedDistributionProductIsRejected() {
+        let wrapped = #"<wrapper><installer-gui-script><product id="com.example.app" version="1.0"/></installer-gui-script></wrapper>"#
+        #expect(PackageVerifier.distributionMetadataMismatch(expectedIdentifier: "com.example.app", expectedVersion: "1.0", distributionXML: wrapped) != nil)
+    }
+
+    @Test("a nested product in Distribution is rejected")
+    func deeplyNestedDistributionProductIsRejected() {
+        let nested = #"<installer-gui-script><wrapper><product id="com.example.app" version="1.0"/></wrapper></installer-gui-script>"#
+        #expect(PackageVerifier.distributionMetadataMismatch(expectedIdentifier: "com.example.app", expectedVersion: "1.0", distributionXML: nested) != nil)
     }
 
     @Test("a distribution product with missing identifier or version is rejected")
