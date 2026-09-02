@@ -6,6 +6,8 @@ BIN="$ROOT/.build/release/swiftpkg"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/swiftpkg-verify.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+"$ROOT/scripts/test-ci-templates.sh"
+
 for tool in /usr/bin/pkgbuild /usr/sbin/pkgutil; do
     if [ ! -x "$tool" ]; then
         printf '%s\n' "missing required macOS tool: $tool" >&2

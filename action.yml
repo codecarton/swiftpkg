@@ -15,9 +15,9 @@ inputs:
     required: false
     default: 'dist'
   swiftpkg-version:
-    description: 'Release tag of swiftpkg to install. "latest" is accepted but makes builds depend on whatever ships next.'
+    description: 'Release tag of swiftpkg to install. The default is the first release with the CI contract; selected releases must be v0.4.0 or newer.'
     required: false
-    default: 'v0.3.1'
+    default: 'v0.4.0'
   swiftpkg-sha256:
     description: 'Expected SHA-256 of the installer asset. Set it to pin the exact bytes; release assets are mutable, so a tag alone does not.'
     required: false
@@ -65,7 +65,13 @@ runs:
         EXPECTED_TEAM_ID: ${{ inputs.expected-team-id }}
         GH_TOKEN: ${{ github.token }}
       run: |
+        # BEGIN SWIFTPKG_INSTALL_CONTRACT
         set -euo pipefail
+        # GitHub supplies this input default before the step runs. Keep the
+        # shell fallback as a safety net for callers that invoke the step body
+        # in a different runner or test harness.
+        SWIFTPKG_VERSION="${SWIFTPKG_VERSION:-v0.4.0}"
+        export SWIFTPKG_VERSION
         runner_tmp="${RUNNER_TEMP:-/tmp}"
         # Download into a fresh directory so a stale or unexpected package left
         # in the runner temp can't be picked up.
@@ -123,7 +129,97 @@ runs:
         spctl --assess --type install -vv "$pkg"
 
         sudo installer -pkg "$pkg" -target /
-        swiftpkg --version
+
+        # BEGIN SWIFTPKG_COMPATIBILITY_CONTRACT
+        # Keep this check immediately after installation. A release can pass
+        # the installer checks and still predate the flags used below.
+        version_at_least() {
+          local actual="$1"
+          local required="$2"
+          local actual_major actual_minor actual_patch actual_tail
+          local required_major required_minor required_patch required_tail
+
+          case "$actual" in
+            *.*.*) ;;
+            *) return 1 ;;
+          esac
+          actual_major="${actual%%.*}"
+          actual_tail="${actual#*.}"
+          actual_minor="${actual_tail%%.*}"
+          actual_patch="${actual_tail#*.}"
+          case "$actual_patch" in
+            ''|*.*) return 1 ;;
+          esac
+
+          case "$required" in
+            *.*.*) ;;
+            *) return 1 ;;
+          esac
+          required_major="${required%%.*}"
+          required_tail="${required#*.}"
+          required_minor="${required_tail%%.*}"
+          required_patch="${required_tail#*.}"
+          case "$required_patch" in
+            ''|*.*) return 1 ;;
+          esac
+
+          for component in \
+            "$actual_major" "$actual_minor" "$actual_patch" \
+            "$required_major" "$required_minor" "$required_patch"; do
+            case "$component" in
+              ''|*[!0-9]*) return 1 ;;
+            esac
+          done
+
+          if [ "$actual_major" -lt "$required_major" ] ||
+             { [ "$actual_major" -eq "$required_major" ] && [ "$actual_minor" -lt "$required_minor" ]; } ||
+             { [ "$actual_major" -eq "$required_major" ] && [ "$actual_minor" -eq "$required_minor" ] && [ "$actual_patch" -lt "$required_patch" ]; }; then
+            return 1
+          fi
+        }
+
+        require_compatible_swiftpkg() {
+          local required_version='0.4.0'
+          local installed_version help missing option
+          local required_options=(
+            '--output-format'
+            '--output-dir'
+            '--pkg-version'
+            '--lint'
+            '--verify'
+            '--provenance'
+          )
+
+          if ! installed_version="$(swiftpkg --version 2>&1)"; then
+            echo "swiftpkg compatibility check failed: could not run swiftpkg --version." >&2
+            exit 1
+          fi
+          if ! version_at_least "$installed_version" "$required_version"; then
+            echo "swiftpkg $installed_version is incompatible with this CI template; requires swiftpkg >= $required_version (the release must provide --output-format, --output-dir, --pkg-version, --lint, --verify, and --provenance)." >&2
+            exit 1
+          fi
+          if ! help="$(swiftpkg --help 2>&1)"; then
+            echo "swiftpkg $installed_version is incompatible with this CI template: swiftpkg --help could not be read." >&2
+            exit 1
+          fi
+
+          missing=''
+          for option in "${required_options[@]}"; do
+            if ! grep -Fq -- "$option" <<< "$help"; then
+              if [ -n "$missing" ]; then missing="$missing, "; fi
+              missing="$missing$option"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "swiftpkg $installed_version is incompatible with this CI template: missing required option(s): $missing. Install swiftpkg >= $required_version." >&2
+            exit 1
+          fi
+          echo "Using swiftpkg $installed_version (CI contract requires >= $required_version)."
+        }
+
+        require_compatible_swiftpkg
+        # END SWIFTPKG_COMPATIBILITY_CONTRACT
+        # END SWIFTPKG_INSTALL_CONTRACT
 
     - name: Lint
       if: ${{ inputs.lint == 'true' }}
@@ -143,6 +239,7 @@ runs:
         DO_PROVENANCE: ${{ inputs.provenance }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
+        # BEGIN SWIFTPKG_BUILD_CONTRACT
         set -euo pipefail
         # extra-args first so the action's required flags (json output,
         # output-dir) always win and can't be overridden into a shape that
@@ -164,6 +261,15 @@ runs:
         fi
         result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
         echo "$result"
-        echo "pkg-path=$(echo "$result" | jq -r '.pkg_path')" >> "$GITHUB_OUTPUT"
-        echo "version=$(echo "$result" | jq -r '.version')" >> "$GITHUB_OUTPUT"
-        echo "sha256=$(echo "$result" | jq -r '.sha256')" >> "$GITHUB_OUTPUT"
+        manifest_value() {
+          local key="$1"
+          printf '%s' "$result" | jq -er --arg key "$key" \
+            '.[$key] | select(type == "string") | select(length > 0) | select((contains("\r") | not) and (contains("\n") | not))'
+        }
+        pkg_path="$(manifest_value pkg_path)"
+        version="$(manifest_value version)"
+        sha256="$(manifest_value sha256)"
+        printf 'pkg-path=%s\n' "$pkg_path" >> "$GITHUB_OUTPUT"
+        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+        printf 'sha256=%s\n' "$sha256" >> "$GITHUB_OUTPUT"
+        # END SWIFTPKG_BUILD_CONTRACT
