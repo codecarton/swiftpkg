@@ -6,6 +6,8 @@ BIN="$ROOT/.build/release/swiftpkg"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/swiftpkg-verify.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+"$ROOT/scripts/test-ci-templates.sh"
+
 for tool in /usr/bin/pkgbuild /usr/sbin/pkgutil; do
     if [ ! -x "$tool" ]; then
         printf '%s\n' "missing required macOS tool: $tool" >&2
@@ -61,6 +63,7 @@ test -e "$WORK/expanded-empty/Payload"
 RECEIPT="$WORK/ReceiptOnly"
 run "$BIN" --create "$RECEIPT"
 rm -rf "$RECEIPT/payload" "$RECEIPT/scripts"
+run "$BIN" --lint "$RECEIPT"
 run "$BIN" "$RECEIPT"
 run /usr/sbin/pkgutil --expand "$RECEIPT/build/ReceiptOnly-1.0.pkg" "$WORK/expanded-receipt"
 test ! -e "$WORK/expanded-receipt/Payload"

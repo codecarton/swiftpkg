@@ -62,14 +62,11 @@ public struct Linter {
             findings.append(LintFinding(.warning, "notarization is configured but signing is not; notarization requires a Developer ID signature"))
         }
 
-        let payload = project.appendingPathComponent("payload", isDirectory: true)
+        // A project with neither payload nor scripts is a valid receipt-only
+        // package; PackageBuilder emits `pkgbuild --nopayload` for that case.
         let scripts = project.appendingPathComponent("scripts", isDirectory: true)
-        let hasPayload = fileManager.directoryExists(at: payload)
         let hasScripts = fileManager.directoryExists(at: scripts)
             && ((try? fileManager.contents(at: scripts).contains { $0 != ".DS_Store" }) ?? false)
-        if !hasPayload, !hasScripts {
-            findings.append(LintFinding(.error, "project has neither a payload directory nor a non-empty scripts directory"))
-        }
 
         if hasScripts {
             findings.append(contentsOf: lintScripts(in: scripts))
