@@ -52,8 +52,11 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
         if configuration.verifies {
             let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
+            let expectedIdentifier = packageConfiguration.usesDistributionStyle
+                ? packageConfiguration.productIdentifier ?? packageConfiguration.identifier
+                : packageConfiguration.identifier
             try PackageVerifier(runner: runner, console: console)
-                .verify(package: output, expectedIdentifier: packageConfiguration.identifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
+                .verify(package: output, expectedIdentifier: expectedIdentifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
         }
         if configuration.writesProvenance {
             let provenance = try ProvenanceBuilder(runner: runner, fileManager: fileManager)
