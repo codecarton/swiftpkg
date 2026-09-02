@@ -28,6 +28,26 @@ assert_file_contains() {
   grep -Fq -- "$expected" "$file" || fail "$file does not contain '$expected'"
 }
 
+assert_file_not_contains() {
+  local file="$1"
+  local unexpected="$2"
+  if grep -Fq -- "$unexpected" "$file"; then
+    fail "$file unexpectedly contains '$unexpected'"
+  fi
+}
+
+assert_line_before() {
+  local file="$1"
+  local first="$2"
+  local second="$3"
+  local first_line second_line
+  first_line="$(grep -n -m 1 -F -- "$first" "$file" | cut -d: -f1)"
+  second_line="$(grep -n -m 1 -F -- "$second" "$file" | cut -d: -f1)"
+  [ -n "$first_line" ] || fail "$file does not contain '$first'"
+  [ -n "$second_line" ] || fail "$file does not contain '$second'"
+  [ "$first_line" -lt "$second_line" ] || fail "$file checks '$first' after '$second'"
+}
+
 # Pull a marked bash body out of a YAML block scalar. The first body line sets
 # the YAML indentation to remove, so nested shell indentation is preserved.
 extract_block() {
@@ -65,6 +85,8 @@ for template in action azure; do
   assert_contains "$contents" "default: 'v0.4.0'" "$file"
   assert_contains "$contents" 'BEGIN SWIFTPKG_COMPATIBILITY_CONTRACT' "$file"
   assert_contains "$contents" 'END SWIFTPKG_COMPATIBILITY_CONTRACT' "$file"
+  assert_contains "$contents" 'BEGIN SWIFTPKG_INSTALL_CONTRACT' "$file"
+  assert_contains "$contents" 'END SWIFTPKG_INSTALL_CONTRACT' "$file"
   assert_contains "$contents" 'BEGIN SWIFTPKG_BUILD_CONTRACT' "$file"
   assert_contains "$contents" 'END SWIFTPKG_BUILD_CONTRACT' "$file"
   assert_contains "$contents" "$checksum_input" "$file"
@@ -75,6 +97,13 @@ for template in action azure; do
   for option in --output-format --output-dir --pkg-version --lint --verify --provenance; do
     assert_contains "$contents" "$option" "$file"
   done
+  assert_line_before "$file" 'END SWIFTPKG_COMPATIBILITY_CONTRACT' 'BEGIN SWIFTPKG_BUILD_CONTRACT'
+  if [ "$template" = azure ]; then
+    assert_contains "$contents" 'asset_count=' "$file"
+    assert_line_before "$file" 'END SWIFTPKG_COMPATIBILITY_CONTRACT' '- bash: swiftpkg --lint'
+  else
+    assert_line_before "$file" 'END SWIFTPKG_COMPATIBILITY_CONTRACT' 'run: swiftpkg --lint'
+  fi
 done
 
 FAKE_BIN="$TEMP_ROOT/bin"
@@ -83,6 +112,7 @@ FAKE_SWIFTPKG="$FAKE_BIN/swiftpkg"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
+  'if [ -n "${FAKE_SWIFTPKG_CALLS:-}" ]; then printf "%s\\n" "$*" >> "$FAKE_SWIFTPKG_CALLS"; fi' \
   'case "${1:-}" in' \
   '  --version) printf "%s\\n" "${FAKE_SWIFTPKG_VERSION:?}" ;;' \
   '  --help) printf "%s\\n" "${FAKE_SWIFTPKG_HELP:?}" ;;' \
@@ -94,6 +124,84 @@ printf '%s\n' \
 chmod +x "$FAKE_SWIFTPKG"
 
 ALL_OPTIONS='--output-format --output-dir --pkg-version --lint --verify --provenance'
+
+FAKE_GH="$FAKE_BIN/gh"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'printf "%s\\n" "$*" >> "${FAKE_RELEASE_CALLS:?}"' \
+  'directory=' \
+  'previous=' \
+  'for arg in "$@"; do' \
+  '  if [ "$previous" = "--dir" ]; then directory="$arg"; fi' \
+  '  previous="$arg"' \
+  'done' \
+  '[ -n "$directory" ]' \
+  'package="$directory/swiftpkg-${FAKE_RELEASE_VERSION:?}-cli.pkg"' \
+  'printf "%s\\n" fake-installer > "$package"' \
+  'checksum="$(shasum -a 256 "$package")"' \
+  'checksum="${checksum%% *}"' \
+  'printf "%s  %s\\n" "$checksum" "$(basename "$package")" > "$directory/SHA256SUMS"' \
+  > "$FAKE_GH"
+chmod +x "$FAKE_GH"
+
+FAKE_CURL="$FAKE_BIN/curl"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'url=' \
+  'destination=' \
+  'previous=' \
+  'for arg in "$@"; do' \
+  '  if [ "$previous" = "-o" ]; then destination="$arg"; fi' \
+  '  url="$arg"' \
+  '  previous="$arg"' \
+  'done' \
+  'printf "%s\\n" "$*" >> "${FAKE_RELEASE_CALLS:?}"' \
+  'if [ -z "$destination" ]; then' \
+  '  printf "%s\\n" "${FAKE_RELEASE_JSON:?}"' \
+  'elif [ "$url" = "https://fake/SHA256SUMS" ]; then' \
+  '  package="${AGENT_TEMPDIRECTORY:?}/swiftpkg-${FAKE_RELEASE_VERSION:?}-cli.pkg"' \
+  '  checksum="$(shasum -a 256 "$package")"' \
+  '  checksum="${checksum%% *}"' \
+  '  printf "%s  %s\\n" "$checksum" "$(basename "$package")" > "$destination"' \
+  'else' \
+  '  printf "%s\\n" fake-installer > "$destination"' \
+  'fi' \
+  > "$FAKE_CURL"
+chmod +x "$FAKE_CURL"
+
+FAKE_PKGUTIL="$FAKE_BIN/pkgutil"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [ "${1:-}" = "--check-signature" ]; then' \
+  '  printf "%s\\n" "Package: ${2:?}" "Status: signed" "Developer ID Installer: swiftpkg (${EXPECTED_TEAM_ID:?})"' \
+  'fi' \
+  > "$FAKE_PKGUTIL"
+chmod +x "$FAKE_PKGUTIL"
+
+FAKE_SPCTL="$FAKE_BIN/spctl"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'exit 0' \
+  > "$FAKE_SPCTL"
+chmod +x "$FAKE_SPCTL"
+
+FAKE_SUDO="$FAKE_BIN/sudo"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'printf "%s\\n" "$*" >> "${FAKE_ROOT_COMMANDS:?}"' \
+  > "$FAKE_SUDO"
+chmod +x "$FAKE_SUDO"
+
+release_json_for_version() {
+  local version="$1"
+  printf '{"assets":[{"name":"swiftpkg-%s-cli.pkg","browser_download_url":"https://fake/swiftpkg-%s-cli.pkg"},{"name":"SHA256SUMS","browser_download_url":"https://fake/SHA256SUMS"}]}\n' \
+    "$version" "$version"
+}
 
 run_compatibility_contract() {
   local name="$1"
@@ -148,6 +256,163 @@ for template in action azure; do
     '--output-format --output-dir --pkg-version --lint --verify' false \
     'missing required option(s): --provenance'
 done
+
+run_install_contract() {
+  local name="$1"
+  local file="$2"
+  local selected_version="$3"
+  local release_version="$4"
+  local release_json="$5"
+  local should_pass="$6"
+  local expected_message="$7"
+  local block wrapper stdout stderr calls root_calls swift_calls sentinel runner_tmp agent_tmp status
+
+  block="$(extract_block "$file" 'BEGIN SWIFTPKG_INSTALL_CONTRACT' 'END SWIFTPKG_INSTALL_CONTRACT')"
+  [ -n "$block" ] || fail "$file install contract is empty"
+  stdout="$TEMP_ROOT/$name-install.stdout"
+  stderr="$TEMP_ROOT/$name-install.stderr"
+  calls="$TEMP_ROOT/$name-release.calls"
+  root_calls="$TEMP_ROOT/$name-root.calls"
+  swift_calls="$TEMP_ROOT/$name-swiftpkg.calls"
+  sentinel="$TEMP_ROOT/$name-project-executed"
+  runner_tmp="$TEMP_ROOT/$name-runner"
+  agent_tmp="$TEMP_ROOT/$name-agent"
+  mkdir -p "$runner_tmp" "$agent_tmp"
+  : > "$calls"
+  : > "$root_calls"
+  : > "$swift_calls"
+  wrapper="$block
+printf \"%s\\n\" project-execution > \"$sentinel\""
+
+  if [ "$file" = "$ACTION" ]; then
+    if [ "$selected_version" = default ]; then
+      if (
+        unset SWIFTPKG_VERSION
+        PATH="$FAKE_BIN:$PATH" \
+        RUNNER_TEMP="$runner_tmp" \
+        SWIFTPKG_SHA256='' \
+        EXPECTED_TEAM_ID='DPXY7JLK67' \
+        GH_TOKEN='' \
+        FAKE_RELEASE_VERSION="$release_version" \
+        FAKE_RELEASE_CALLS="$calls" \
+        FAKE_ROOT_COMMANDS="$root_calls" \
+        FAKE_SWIFTPKG_CALLS="$swift_calls" \
+        FAKE_SWIFTPKG_VERSION="$release_version" \
+        FAKE_SWIFTPKG_HELP="$ALL_OPTIONS" \
+        bash -c "$wrapper" > "$stdout" 2> "$stderr"
+      ); then
+        status=0
+      else
+        status=$?
+      fi
+    else
+      if PATH="$FAKE_BIN:$PATH" \
+        SWIFTPKG_VERSION="$selected_version" \
+        RUNNER_TEMP="$runner_tmp" \
+        SWIFTPKG_SHA256='' \
+        EXPECTED_TEAM_ID='DPXY7JLK67' \
+        GH_TOKEN='' \
+        FAKE_RELEASE_VERSION="$release_version" \
+        FAKE_RELEASE_CALLS="$calls" \
+        FAKE_ROOT_COMMANDS="$root_calls" \
+        FAKE_SWIFTPKG_CALLS="$swift_calls" \
+        FAKE_SWIFTPKG_VERSION="$release_version" \
+        FAKE_SWIFTPKG_HELP="$ALL_OPTIONS" \
+        bash -c "$wrapper" > "$stdout" 2> "$stderr"; then
+        status=0
+      else
+        status=$?
+      fi
+    fi
+  elif [ "$selected_version" = default ]; then
+    if (
+      unset SWIFTPKG_VERSION
+      PATH="$FAKE_BIN:$PATH" \
+      AGENT_TEMPDIRECTORY="$agent_tmp" \
+      SWIFTPKG_SHA256='' \
+      EXPECTED_TEAM_ID='DPXY7JLK67' \
+      FAKE_RELEASE_VERSION="$release_version" \
+      FAKE_RELEASE_JSON="$release_json" \
+      FAKE_RELEASE_CALLS="$calls" \
+      FAKE_ROOT_COMMANDS="$root_calls" \
+      FAKE_SWIFTPKG_CALLS="$swift_calls" \
+      FAKE_SWIFTPKG_VERSION="$release_version" \
+      FAKE_SWIFTPKG_HELP="$ALL_OPTIONS" \
+      bash -c "$wrapper" > "$stdout" 2> "$stderr"
+    ); then
+      status=0
+    else
+      status=$?
+    fi
+  else
+    if PATH="$FAKE_BIN:$PATH" \
+      SWIFTPKG_VERSION="$selected_version" \
+      AGENT_TEMPDIRECTORY="$agent_tmp" \
+      SWIFTPKG_SHA256='' \
+      EXPECTED_TEAM_ID='DPXY7JLK67' \
+      FAKE_RELEASE_VERSION="$release_version" \
+      FAKE_RELEASE_JSON="$release_json" \
+      FAKE_RELEASE_CALLS="$calls" \
+      FAKE_ROOT_COMMANDS="$root_calls" \
+      FAKE_SWIFTPKG_CALLS="$swift_calls" \
+      FAKE_SWIFTPKG_VERSION="$release_version" \
+      FAKE_SWIFTPKG_HELP="$ALL_OPTIONS" \
+      bash -c "$wrapper" > "$stdout" 2> "$stderr"; then
+      status=0
+    else
+      status=$?
+    fi
+  fi
+
+  if [ "$should_pass" = true ]; then
+    [ "$status" -eq 0 ] || {
+      cat "$stdout" "$stderr" >&2
+      fail "$file rejected the compatible default release"
+    }
+    [ -f "$sentinel" ] || fail "$file did not complete its install contract"
+    if [ "$selected_version" = default ]; then
+      if [ "$file" = "$ACTION" ]; then
+        assert_file_contains "$calls" 'release download v0.4.0'
+      else
+        assert_file_contains "$calls" '/releases/tags/v0.4.0'
+      fi
+    fi
+  else
+    [ "$status" -ne 0 ] || fail "$file accepted an invalid install contract"
+    [ ! -e "$sentinel" ] || fail "$file executed the project after a failed install contract"
+    if ! grep -Fq -- "$expected_message" "$stdout" "$stderr"; then
+      cat "$stdout" "$stderr" >&2
+      fail "$file did not explain the failed install contract"
+    fi
+  fi
+
+  if [ "$selected_version" = 'v0.3.1' ]; then
+    assert_file_contains "$swift_calls" '--version'
+    assert_file_not_contains "$swift_calls" '--help'
+    [ "$(wc -l < "$swift_calls" | tr -d ' ')" -eq 1 ] || {
+      cat "$swift_calls" >&2
+      fail "$file ran more than the version check for an incompatible release"
+    }
+  fi
+}
+
+release_040="$(release_json_for_version '0.4.0')"
+release_031="$(release_json_for_version '0.3.1')"
+duplicate_release='{"assets":[{"name":"swiftpkg-0.4.0-cli.pkg","browser_download_url":"https://fake/swiftpkg-0.4.0-cli.pkg"},{"name":"swiftpkg-0.4.0-alt-cli.pkg","browser_download_url":"https://fake/swiftpkg-0.4.0-alt-cli.pkg"},{"name":"SHA256SUMS","browser_download_url":"https://fake/SHA256SUMS"}]}'
+
+# These execute the complete install blocks, with no version input in the two
+# default cases. The sentinel appended after the block proves that an
+# incompatible release exits before the template can reach lint, build, or a
+# project command. Azure also gets an ambiguous release response to exercise
+# its exactly-one asset guard before any download or installation.
+run_install_contract action-default "$ACTION" default '0.4.0' "$release_040" true ''
+run_install_contract azure-default "$AZURE" default '0.4.0' "$release_040" true ''
+run_install_contract action-old-release "$ACTION" 'v0.3.1' '0.3.1' "$release_031" false \
+  'requires swiftpkg >= 0.4.0'
+run_install_contract azure-old-release "$AZURE" 'v0.3.1' '0.3.1' "$release_031" false \
+  'requires swiftpkg >= 0.4.0'
+run_install_contract azure-ambiguous-release "$AZURE" 'v0.4.0' '0.4.0' "$duplicate_release" false \
+  'Expected exactly one swiftpkg CLI package asset'
 
 run_build_contract() {
   local name="$1"

@@ -65,7 +65,13 @@ runs:
         EXPECTED_TEAM_ID: ${{ inputs.expected-team-id }}
         GH_TOKEN: ${{ github.token }}
       run: |
+        # BEGIN SWIFTPKG_INSTALL_CONTRACT
         set -euo pipefail
+        # GitHub supplies this input default before the step runs. Keep the
+        # shell fallback as a safety net for callers that invoke the step body
+        # in a different runner or test harness.
+        SWIFTPKG_VERSION="${SWIFTPKG_VERSION:-v0.4.0}"
+        export SWIFTPKG_VERSION
         runner_tmp="${RUNNER_TEMP:-/tmp}"
         # Download into a fresh directory so a stale or unexpected package left
         # in the runner temp can't be picked up.
@@ -213,6 +219,7 @@ runs:
 
         require_compatible_swiftpkg
         # END SWIFTPKG_COMPATIBILITY_CONTRACT
+        # END SWIFTPKG_INSTALL_CONTRACT
 
     - name: Lint
       if: ${{ inputs.lint == 'true' }}

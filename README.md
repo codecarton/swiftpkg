@@ -312,6 +312,15 @@ outputs on the step named `build`; these correspond to the GitHub Action's
 `pkg-path`, `version`, and `sha256` outputs and are extracted from the same JSON
 manifest fields (`pkg_path`, `version`, and `sha256`).
 
+### Release sequencing
+
+The pinned `v0.4.0` tag is the planned first release containing this CI
+contract. It is intentionally referenced on `next` ahead of publication; until
+that tag and its installer assets are published, runs using the documented
+defaults fail at release download rather than silently selecting the older
+`v0.3.1` CLI. Publish `v0.4.0` before promoting this template, or update the
+pinned version and the compatibility contract together.
+
 ## Marketing site
 
 The static marketing site lives in [`site/`](site/) and publishes to

@@ -61,7 +61,13 @@ parameters:
 
 steps:
   - bash: |
+      # BEGIN SWIFTPKG_INSTALL_CONTRACT
       set -euo pipefail
+      # Azure supplies this parameter default before the step runs. Keep the
+      # shell fallback as a safety net for callers that invoke the step body
+      # in a different runner or test harness.
+      SWIFTPKG_VERSION="${SWIFTPKG_VERSION:-v0.4.0}"
+      export SWIFTPKG_VERSION
       if ! command -v jq >/dev/null 2>&1; then
         echo "##vso[task.logissue type=error]jq is required but was not found. Install it (e.g. 'brew install jq')."
         exit 1
@@ -75,13 +81,17 @@ steps:
       # A release publishes swiftpkg-<version>-cli.pkg (the CLI alone),
       # swiftpkg-<version>-combined.pkg (CLI + Swiftpkgr), and SHA256SUMS. CI
       # wants the CLI. The name embeds the version, so resolve the asset URL from
-      # the release metadata rather than guessing the filename. Select the first
-      # match inside jq — piping to `head` under pipefail can SIGPIPE jq and fail
-      # the step when more than one asset matches.
+      # the release metadata rather than guessing the filename. Reject ambiguity
+      # before downloading or installing anything as root.
       release="$(curl -fsSL "$api")"
+      asset_count="$(printf '%s' "$release" | jq -er '[.assets[] | select(.name | test("swiftpkg-.*-cli\\.pkg$"))] | length')" || asset_count=0
+      if [ "$asset_count" -ne 1 ]; then
+        echo "##vso[task.logissue type=error]Expected exactly one swiftpkg CLI package asset for '$SWIFTPKG_VERSION', found $asset_count."
+        exit 1
+      fi
       url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name | test("swiftpkg-.*-cli\\.pkg$")) | .browser_download_url)')" || url=""
       if [ -z "$url" ]; then
-        echo "##vso[task.logissue type=error]Could not find a swiftpkg CLI package asset for '$SWIFTPKG_VERSION'."
+        echo "##vso[task.logissue type=error]Could not resolve the swiftpkg CLI package asset URL for '$SWIFTPKG_VERSION'."
         exit 1
       fi
       sums_url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name == "SHA256SUMS") | .browser_download_url)')" || sums_url=""
@@ -221,6 +231,7 @@ steps:
 
       require_compatible_swiftpkg
       # END SWIFTPKG_COMPATIBILITY_CONTRACT
+      # END SWIFTPKG_INSTALL_CONTRACT
     displayName: 'Install swiftpkg'
     env:
       SWIFTPKG_VERSION: ${{ parameters.swiftpkgVersion }}
