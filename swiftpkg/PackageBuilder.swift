@@ -122,7 +122,12 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         } else {
             console.display("Applied \(applied.count) of \(variables.count) build variable(s) to \(processed.substituted.count) install script(s)")
         }
-        return processed.directory
+        // Keep the original script tree when no placeholder was replaced. In
+        // addition to avoiding needless staging, this preserves the normal
+        // ScriptPreparer permission normalization instead of letting an
+        // unused environment file change the effective script modes (and its
+        // provenance digest).
+        return applied.isEmpty ? nil : processed.directory
     }
 
     private func failOnUnresolved(_ unresolved: [String: Set<String>]) throws {

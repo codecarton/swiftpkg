@@ -198,6 +198,37 @@ struct ProvenanceTests {
         #expect(runner.calls.contains { $0.executable.hasSuffix("pkgbuild") && $0.arguments.contains { $0.hasSuffix("/env-scripts") } })
     }
 
+    @Test("unused environment values do not change the effective script digest")
+    func unusedEnvironmentDoesNotChangeDigest() async throws {
+        let temp = try TemporaryDirectory()
+        defer { temp.remove() }
+        let project = temp.url.appendingPathComponent("P", isDirectory: true)
+        let scripts = project.appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: true)
+        try write("#!/bin/sh\necho unchanged\n", to: scripts.appendingPathComponent("postinstall"))
+        try write(#"{"name":"App-1.0.pkg","identifier":"com.example.app","version":"1.0"}"#, to: project.appendingPathComponent("build-info.json"))
+
+        let runner = RecordingRunner()
+        runner.onRun = { executable, arguments in
+            guard executable.hasSuffix("pkgbuild"), let output = arguments.last else { return }
+            try write("fake package", to: URL(fileURLWithPath: output))
+        }
+        let coordinator = PackageBuildCoordinator(fileManager: .default, runner: runner, console: makeConsole())
+        let options = PackageBuildOptions(skipsSigning: true, writesProvenance: true)
+        try await coordinator.buildPackage(in: project, configuration: options)
+        let sidecar = project.appendingPathComponent("build/App-1.0.pkg.provenance.json")
+        let withoutEnvironment = try JSONDecoder().decode(Provenance.self, from: Data(contentsOf: sidecar))
+
+        try write("SWIFTPKG_UNUSED=does-not-apply\n", to: project.appendingPathComponent(".env"))
+        try await coordinator.buildPackage(in: project, configuration: options)
+        let withUnusedEnvironment = try JSONDecoder().decode(Provenance.self, from: Data(contentsOf: sidecar))
+        let pkgbuildCalls = runner.calls.filter { $0.executable.hasSuffix("pkgbuild") }
+
+        #expect(withUnusedEnvironment.inputDigest == withoutEnvironment.inputDigest)
+        #expect(pkgbuildCalls.count == 2)
+        #expect(pkgbuildCalls.allSatisfy { !$0.arguments.contains { $0.contains("env-scripts") } })
+    }
+
     private func makeDigestFixture() throws -> (TemporaryDirectory, URL, URL, ProvenanceBuilder, PackageConfiguration) {
         let temp = try TemporaryDirectory()
         let project = temp.url.appendingPathComponent("P", isDirectory: true)
