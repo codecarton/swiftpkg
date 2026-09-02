@@ -8,7 +8,8 @@ struct PackageVerifier {
     var fileManager: FileManager = .default
 
     /// - Parameters:
-    ///   - expectedIdentifier: the `identifier` build-info declared.
+    ///   - expectedIdentifier: the identifier build-info declares for the
+    ///     finished package (the product identifier for distributions).
     ///   - expectedVersion: the `version` build-info declared.
     ///   - signed: signing was requested, so a valid signature must be present.
     ///   - notarized: notarization was requested, so Gatekeeper must accept it.
@@ -32,10 +33,8 @@ struct PackageVerifier {
 
     /// Confirms the built package embeds the identifier and version build-info
     /// declared, so a stale or mismatched artifact can't silently pass `--verify`.
-    ///
-    /// Best-effort: component packages carry a top-level `PackageInfo`; if it
-    /// can't be extracted (e.g. a distribution-style package, whose metadata
-    /// lives elsewhere), the check is skipped rather than failing the build.
+    /// Component packages store this metadata in `PackageInfo`; distribution
+    /// packages store it in the expanded `Distribution` document.
     private func verifyMetadata(package: URL, expectedIdentifier: String, expectedVersion: String) throws {
         let scratch = fileManager.temporaryDirectory.appendingPathComponent("swiftpkg-verify-\(UUID().uuidString)", isDirectory: true)
         defer { try? fileManager.removeItem(at: scratch) }
@@ -43,16 +42,47 @@ struct PackageVerifier {
         guard result.status == 0 else {
             throw SwiftPkgError.message("Verification failed: could not expand \(package.lastPathComponent) to inspect its metadata. \(diagnostics(result))")
         }
-        // A component package carries a top-level PackageInfo. If it's absent
-        // (e.g. a distribution-style package, whose metadata lives elsewhere)
-        // the metadata check is skipped rather than failing the build.
-        guard let data = try? Data(contentsOf: scratch.appendingPathComponent("PackageInfo")),
-              let xml = String(data: data, encoding: .utf8)
-        else { return }
-        if let mismatch = Self.metadataMismatch(expectedIdentifier: expectedIdentifier, expectedVersion: expectedVersion, packageInfoXML: xml) {
+
+        let metadataFile: URL
+        let mismatch: String?
+        if fileManager.itemExists(at: scratch.appendingPathComponent("Distribution")) {
+            metadataFile = scratch.appendingPathComponent("Distribution")
+            let xml = try metadataXML(at: metadataFile, package: package, kind: "Distribution")
+            mismatch = Self.distributionMetadataMismatch(
+                expectedIdentifier: expectedIdentifier,
+                expectedVersion: expectedVersion,
+                distributionXML: xml
+            )
+        } else {
+            metadataFile = scratch.appendingPathComponent("PackageInfo")
+            let xml = try metadataXML(at: metadataFile, package: package, kind: "PackageInfo")
+            mismatch = Self.metadataMismatch(
+                expectedIdentifier: expectedIdentifier,
+                expectedVersion: expectedVersion,
+                packageInfoXML: xml
+            )
+        }
+        if let mismatch {
             throw SwiftPkgError.message("Verification failed: \(mismatch)")
         }
         console.display("Verified package identifier and version")
+    }
+
+    private func metadataXML(at url: URL, package: URL, kind: String) throws -> String {
+        do {
+            let data = try Data(contentsOf: url)
+            guard let xml = String(data: data, encoding: .utf8) else {
+                throw SwiftPkgError.message("Verification failed: expanded \(package.lastPathComponent) has invalid UTF-8 in its \(kind) metadata at \(url.path).")
+            }
+            return xml
+        } catch let error as SwiftPkgError {
+            throw error
+        } catch {
+            throw SwiftPkgError.message(
+                "Verification failed: expanded \(package.lastPathComponent) is missing readable "
+                    + "\(kind) metadata at \(url.path). \(error.localizedDescription)"
+            )
+        }
     }
 
     /// Parses a `PackageInfo` document and returns a human-readable message if
@@ -62,20 +92,53 @@ struct PackageVerifier {
         let parser = XMLParser(data: Data(packageInfoXML.utf8))
         let delegate = PackageInfoAttributes()
         parser.delegate = delegate
-        guard parser.parse(), let actual = delegate.pkgInfo else { return nil }
+        guard parser.parse() else {
+            return "package PackageInfo is malformed: \(parser.parserError?.localizedDescription ?? "XML parsing failed")"
+        }
+        guard let actual = delegate.pkgInfo else {
+            return "package PackageInfo is missing a pkg-info element."
+        }
         // A PackageInfo we could parse but that omits identifier/version is
         // incomplete and must not silently pass.
-        guard let identifier = actual["identifier"] else {
+        guard let identifier = actual["identifier"], !identifier.isEmpty else {
             return "package PackageInfo is missing an identifier."
         }
         if identifier != expectedIdentifier {
             return "package identifier is \"\(identifier)\" but build-info declares \"\(expectedIdentifier)\"."
         }
-        guard let version = actual["version"] else {
+        guard let version = actual["version"], !version.isEmpty else {
             return "package PackageInfo is missing a version."
         }
         if version != expectedVersion {
             return "package version is \"\(version)\" but build-info declares \"\(expectedVersion)\"."
+        }
+        return nil
+    }
+
+    /// Parses the product metadata emitted by `productbuild` in a distribution
+    /// package and returns a human-readable mismatch, or `nil` when it agrees
+    /// with build-info.
+    static func distributionMetadataMismatch(expectedIdentifier: String, expectedVersion: String, distributionXML: String) -> String? {
+        let parser = XMLParser(data: Data(distributionXML.utf8))
+        let delegate = DistributionProductAttributes()
+        parser.delegate = delegate
+        guard parser.parse() else {
+            return "package Distribution metadata is malformed: \(parser.parserError?.localizedDescription ?? "XML parsing failed")"
+        }
+        guard let product = delegate.product else {
+            return "package Distribution metadata is missing a product element."
+        }
+        guard let identifier = product["id"], !identifier.isEmpty else {
+            return "package Distribution product metadata is missing an identifier."
+        }
+        if identifier != expectedIdentifier {
+            return "package distribution identifier is \"\(identifier)\" but build-info declares \"\(expectedIdentifier)\"."
+        }
+        guard let version = product["version"], !version.isEmpty else {
+            return "package Distribution product metadata is missing a version."
+        }
+        if version != expectedVersion {
+            return "package distribution version is \"\(version)\" but build-info declares \"\(expectedVersion)\"."
         }
         return nil
     }
@@ -89,8 +152,31 @@ struct PackageVerifier {
 /// Captures the attributes of a `PackageInfo`'s root `pkg-info` element.
 private final class PackageInfoAttributes: NSObject, XMLParserDelegate {
     private(set) var pkgInfo: [String: String]?
+    private var rootElementName: String?
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-        if elementName == "pkg-info", pkgInfo == nil { pkgInfo = attributeDict }
+        if rootElementName == nil { rootElementName = elementName }
+        if rootElementName == "pkg-info", elementName == "pkg-info", pkgInfo == nil {
+            pkgInfo = attributeDict
+        }
+    }
+}
+
+/// Captures the product identifier and version from a distribution document.
+private final class DistributionProductAttributes: NSObject, XMLParserDelegate {
+    private(set) var product: [String: String]?
+    private var rootElementName: String?
+    private var elementDepth = 0
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+        elementDepth += 1
+        if elementDepth == 1 { rootElementName = elementName }
+        if elementDepth == 2, rootElementName == "installer-gui-script", elementName == "product", product == nil {
+            product = attributeDict
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        elementDepth -= 1
     }
 }

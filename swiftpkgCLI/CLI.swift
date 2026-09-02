@@ -57,7 +57,7 @@ public struct CLIOptions: ParsableArguments {
     @Flag(name: .long, help: "Write a <pkg>.provenance.json sidecar (tool version, build time, git commit/remote, input digest, package hash) for supply-chain attestation.")
     public var provenance = false
 
-    @Flag(name: .long, help: "After building, verify the package matches build-info: signature present when signing was requested (pkgutil), Gatekeeper-accepted when notarized (spctl). Fails the build on mismatch.")
+    @Flag(name: .long, help: "After building, verify package identifier/version metadata matches build-info; also require a signature when signing was requested (pkgutil) and Gatekeeper acceptance when notarized (spctl). Fails on mismatch or missing metadata.")
     public var verify = false
 
     @Flag(name: .long, help: "Accepted for munki-pkg compatibility; ignored. swiftpkg never prompts to import into a repo, so there is nothing to skip.")
@@ -169,7 +169,7 @@ public enum CLIParser {
       --strict-env            Fail on unresolved ${VAR} placeholders.
       --no-inherit-env        Don't merge SWIFTPKG_* from the environment.
       --provenance            Write a <pkg>.provenance.json attestation sidecar.
-      --verify                Verify the built package matches build-info.
+      --verify                Verify package metadata matches build-info.
       --output-format FORMAT  Build result on stdout: text (default) or json.
       --skip-import           Accepted for munki-pkg compatibility; ignored.
       --pkg-version VERSION   Override the build-info version.

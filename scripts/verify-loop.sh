@@ -6,6 +6,8 @@ BIN="$ROOT/.build/release/swiftpkg"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/swiftpkg-verify.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+"$ROOT/scripts/test-ci-templates.sh"
+
 CLI_PACKAGE_ROOT="$WORK/cli-package-root"
 APP_RESOURCE_ROOT="$WORK/Swiftpkgr.app/Contents/Resources"
 "$ROOT/scripts/stage-license-docs.sh" \
@@ -86,6 +88,7 @@ test -e "$WORK/expanded-empty/Payload"
 RECEIPT="$WORK/ReceiptOnly"
 run "$BIN" --create "$RECEIPT"
 rm -rf "$RECEIPT/payload" "$RECEIPT/scripts"
+run "$BIN" --lint "$RECEIPT"
 run "$BIN" "$RECEIPT"
 run /usr/sbin/pkgutil --expand "$RECEIPT/build/ReceiptOnly-1.0.pkg" "$WORK/expanded-receipt"
 test ! -e "$WORK/expanded-receipt/Payload"
@@ -220,9 +223,9 @@ esac
 
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
-printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"
+printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true,' '  "product id": "com.example.distribution.product"' '}' > "$DISTRIBUTION/build-info.json"
 printf '%s\n' 'distribution' > "$DISTRIBUTION/payload/distribution.txt"
-run "$BIN" "$DISTRIBUTION"
+run "$BIN" --verify "$DISTRIBUTION"
 test -f "$DISTRIBUTION/build/Distribution-2.0.pkg"
 run /usr/sbin/pkgutil --expand "$DISTRIBUTION/build/Distribution-2.0.pkg" "$WORK/expanded-distribution"
 test -f "$WORK/expanded-distribution/Distribution"
