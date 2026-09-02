@@ -44,7 +44,13 @@ public struct ProvenanceBuilder {
         self.fileManager = fileManager
     }
 
-    public func build(configuration: PackageConfiguration, output: URL, project: URL, now: Date = Date()) throws -> Provenance {
+    public func build(
+        configuration: PackageConfiguration,
+        output: URL,
+        project: URL,
+        now: Date = Date(),
+        effectiveScripts: URL? = nil
+    ) throws -> Provenance {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return Provenance(
@@ -55,25 +61,33 @@ public struct ProvenanceBuilder {
             version: configuration.version,
             identifier: configuration.identifier,
             pkgPath: output.path,
-            sha256: try provenanceSHA256(ofFileAt: output),
-            inputDigest: try inputDigest(for: project),
+            sha256: try sha256Hex(ofFileAt: output),
+            inputDigest: try inputDigest(for: project, effectiveScripts: effectiveScripts),
             gitCommit: gitOutput(["-C", project.path, "rev-parse", "HEAD"], in: project),
             gitRemote: gitOutput(["-C", project.path, "remote", "get-url", "origin"], in: project).map(Self.sanitizedRemote)
         )
     }
 
     /// Deterministic digest of the build inputs (payload, scripts, build-info),
-    /// hashing each file's project-relative path and contents in sorted order.
-    private func inputDigest(for project: URL) throws -> String {
+    /// hashing each file's logical project-relative path and contents in sorted
+    /// order. When substitutions are applied, `effectiveScripts` is the
+    /// temporary directory that pkgbuild actually consumes. Its files retain
+    /// the logical `scripts/` prefix so the temporary path never enters the
+    /// attestation.
+    private func inputDigest(for project: URL, effectiveScripts: URL?) throws -> String {
         var entries: [(path: String, url: URL)] = []
-        for subdirectory in ["payload", "scripts"] {
-            let directory = project.appendingPathComponent(subdirectory, isDirectory: true)
+        let inputDirectories: [(logicalPath: String, directory: URL)] = [
+            ("payload", project.appendingPathComponent("payload", isDirectory: true)),
+            ("scripts", effectiveScripts ?? project.appendingPathComponent("scripts", isDirectory: true)),
+        ]
+        for (logicalPath, directory) in inputDirectories {
             guard fileManager.directoryExists(at: directory) else { continue }
             guard let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { continue }
             for case let fileURL as URL in enumerator {
                 let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
                 guard values?.isRegularFile == true || values?.isSymbolicLink == true else { continue }
-                entries.append((relativePath(of: fileURL, under: project), fileURL))
+                let relativePath = relativePath(of: fileURL, under: directory)
+                entries.append((logicalPath + "/" + relativePath, fileURL))
             }
         }
         for name in ["build-info.plist", "build-info.json", "build-info.yaml", "build-info.yml"] {
@@ -97,8 +111,8 @@ public struct ProvenanceBuilder {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    private func relativePath(of url: URL, under project: URL) -> String {
-        let base = project.standardizedFileURL.path
+    private func relativePath(of url: URL, under directory: URL) -> String {
+        let base = directory.standardizedFileURL.path
         let path = url.standardizedFileURL.path
         return path.hasPrefix(base + "/") ? String(path.dropFirst(base.count + 1)) : url.lastPathComponent
     }
@@ -118,15 +132,4 @@ public struct ProvenanceBuilder {
         guard at < firstSlash else { return remote }
         return String(remote[..<schemeRange.upperBound]) + String(authorityAndPath[authorityAndPath.index(after: at)...])
     }
-}
-
-/// Streaming SHA-256 of a file, lowercase hex.
-func provenanceSHA256(ofFileAt url: URL) throws -> String {
-    let handle = try FileHandle(forReadingFrom: url)
-    defer { try? handle.close() }
-    var hasher = SHA256()
-    while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
-        hasher.update(data: chunk)
-    }
-    return hasher.finalize().map { String(format: "%02x", $0) }.joined()
 }
