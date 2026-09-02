@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SwiftPkgCore
+@testable import swiftpkg
 
 struct ReceiptOnlyBuildTests {
 
@@ -8,8 +9,8 @@ struct ReceiptOnlyBuildTests {
     // receipt-only package. pkgbuild must be invoked with --nopayload (and no
     // --root), matching munki-pkg — otherwise the build would fail looking for
     // a payload that isn't there.
-    @Test("receipt-only project builds with pkgbuild --nopayload")
-    func receiptOnlyUsesNopayload() async throws {
+    @Test("receipt-only project lints cleanly and builds with pkgbuild --nopayload")
+    func receiptOnlyLintsAndBuildsWithNopayload() async throws {
         let temp = try TemporaryDirectory()
         defer { temp.remove() }
         let project = temp.url.appendingPathComponent("ReceiptOnly", isDirectory: true)
@@ -19,6 +20,9 @@ struct ReceiptOnlyBuildTests {
             to: project.appendingPathComponent("build-info.json")
         )
         let runner = RecordingRunner()
+        let lintCode = await SwiftPkg.run(arguments: ["--lint", project.path], runner: runner)
+        #expect(lintCode == 0)
+
         runner.onRun = { executable, arguments in
             guard executable.hasSuffix("pkgbuild"), let output = arguments.last else { return }
             try write("fake package", to: URL(fileURLWithPath: output))
