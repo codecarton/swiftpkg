@@ -266,16 +266,51 @@ jobs:
 
 Inputs: `project-path` (required), `version` (→ `--pkg-version`), `output-dir`,
 `swiftpkg-version`, `swiftpkg-sha256`, `expected-team-id`, `lint`, `verify`,
-`provenance`, `extra-args`. Outputs: `pkg-path`, `version`, `sha256`. Requires a
-swiftpkg release that includes the CI flags (`--output-format`, `--output-dir`,
-`--pkg-version`, `--lint`, `--verify`, `--provenance`).
+`provenance`, `extra-args`. Outputs: `pkg-path`, `version`, `sha256`. The
+`swiftpkg-version` input defaults to the pinned `v0.4.0` release, which is the
+first release containing the CI contract. `latest` is also accepted, but the
+install step rejects it if it resolves to a release older than `v0.4.0` or if
+the installed CLI does not advertise all required flags (`--output-format`,
+`--output-dir`, `--pkg-version`, `--lint`, `--verify`, `--provenance`).
 
 The action installs a release package as root, so it checks what it downloaded
 first: the asset must match the release's `SHA256SUMS` and must be signed by the
-`expected-team-id` Developer Team, and `spctl` must accept it. `swiftpkg-version`
-defaults to a pinned tag rather than `latest`. GitHub release assets can be
-replaced without moving the tag, so a build that must be reproducible byte for
-byte should also set `swiftpkg-sha256` to the checksum it expects.
+`expected-team-id` Developer Team, and `spctl` must accept it. GitHub release
+assets can be replaced without moving the tag, so a build that must be
+reproducible byte for byte should also set `swiftpkg-sha256` to the checksum it
+expects.
+
+## Azure DevOps template
+
+`azure-pipelines/swiftpkg-build.yml` provides the equivalent steps-template for
+macOS agents. Declare this repository as a repository resource, then include the
+template:
+
+```yaml
+resources:
+  repositories:
+    - repository: swiftpkg
+      type: github
+      name: codecarton/swiftpkg
+      endpoint: <your GitHub service connection>
+
+steps:
+  - template: azure-pipelines/swiftpkg-build.yml@swiftpkg
+    parameters:
+      projectPath: packages/my-project
+      version: $(Build.SourceBranchName)
+      lint: true
+```
+
+The required `projectPath` parameter is joined by these defaults: `version` is
+empty, `outputDir` is `dist`, `swiftpkgVersion` is the pinned `v0.4.0` release,
+`swiftpkgSha256` is empty, `expectedTeamId` is `DPXY7JLK67`, and `lint`, `verify`,
+and `provenance` are false. `extraArgs` is empty. The install step performs the
+same SHA-256, Team ID, notarization, and CLI compatibility checks as the GitHub
+Action. It requires `jq` and exposes `pkgPath`, `version`, and `sha256` as
+outputs on the step named `build`; these correspond to the GitHub Action's
+`pkg-path`, `version`, and `sha256` outputs and are extracted from the same JSON
+manifest fields (`pkg_path`, `version`, and `sha256`).
 
 ## Marketing site
 
