@@ -45,23 +45,26 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
                 try DistributionPackageBuilder(fileManager: fileManager, runner: runner, console: console)
                     .buildDistribution(using: context, isQuiet: configuration.isQuiet, skipsSigning: configuration.skipsSigning)
             }
-            guard let notarizationConfig = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning else { return }
-            notarization.value = try await NotarizationService(runner: runner, console: console)
-                .notarize(package: context.output, configuration: notarizationConfig, skipsStapling: configuration.skipsStapling)
+            if let notarizationConfig = packageConfiguration.notarization, !configuration.skipsNotarization, !configuration.skipsSigning {
+                notarization.value = try await NotarizationService(runner: runner, console: console)
+                    .notarize(package: context.output, configuration: notarizationConfig, skipsStapling: configuration.skipsStapling)
+            }
+
+            let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
+            if configuration.verifies {
+                let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
+                try PackageVerifier(runner: runner, console: console)
+                    .verify(package: context.output, expectedIdentifier: packageConfiguration.identifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
+            }
+            if configuration.writesProvenance {
+                let provenance = try ProvenanceBuilder(runner: runner, fileManager: fileManager)
+                    .build(configuration: packageConfiguration, output: context.output, project: project, effectiveScripts: context.effectiveScripts)
+                let sidecar = URL(fileURLWithPath: context.output.path + ".provenance.json")
+                try Data(provenance.jsonString().utf8).write(to: sidecar, options: .atomic)
+                console.display("Wrote provenance to \(sidecar.path)")
+            }
         }
         let signed = packageConfiguration.signing != nil && !configuration.skipsSigning
-        if configuration.verifies {
-            let notarized = packageConfiguration.notarization != nil && !configuration.skipsNotarization && !configuration.skipsSigning
-            try PackageVerifier(runner: runner, console: console)
-                .verify(package: output, expectedIdentifier: packageConfiguration.identifier, expectedVersion: packageConfiguration.version, signed: signed, notarized: notarized)
-        }
-        if configuration.writesProvenance {
-            let provenance = try ProvenanceBuilder(runner: runner, fileManager: fileManager)
-                .build(configuration: packageConfiguration, output: output, project: project)
-            let sidecar = URL(fileURLWithPath: output.path + ".provenance.json")
-            try Data(provenance.jsonString().utf8).write(to: sidecar, options: .atomic)
-            console.display("Wrote provenance to \(sidecar.path)")
-        }
         return BuildResult(
             name: packageConfiguration.name,
             version: packageConfiguration.version,
@@ -119,7 +122,12 @@ public struct PackageBuildCoordinator: @unchecked Sendable {
         } else {
             console.display("Applied \(applied.count) of \(variables.count) build variable(s) to \(processed.substituted.count) install script(s)")
         }
-        return processed.directory
+        // Keep the original script tree when no placeholder was replaced. In
+        // addition to avoiding needless staging, this preserves the normal
+        // ScriptPreparer permission normalization instead of letting an
+        // unused environment file change the effective script modes (and its
+        // provenance digest).
+        return applied.isEmpty ? nil : processed.directory
     }
 
     private func failOnUnresolved(_ unresolved: [String: Set<String>]) throws {
