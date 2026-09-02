@@ -135,6 +135,7 @@ Useful options:
 --skip-signing         Skip configured package signing
 --skip-notarization    Skip configured notarization
 --skip-stapling        Skip notarization stapling
+--verify               Verify package metadata matches build-info
 --help                 Show command help
 --version              Show the tool version
 ```

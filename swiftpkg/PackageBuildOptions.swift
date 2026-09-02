@@ -18,9 +18,9 @@ public struct PackageBuildOptions: Sendable {
     /// Write a `<pkg>.provenance.json` sidecar recording tool version, build
     /// time, git commit/remote, an input digest, and the package hash.
     public let writesProvenance: Bool
-    /// After building, assert the package matches what build-info declared
-    /// (signature present when signing was requested, Gatekeeper-accepted when
-    /// notarized). Fails the build on mismatch.
+    /// After building, assert the package's identifier/version metadata matches
+    /// build-info (plus signature and Gatekeeper checks when requested). Fails
+    /// the build on mismatch or missing metadata.
     public let verifies: Bool
     /// Overrides the build-info version (resolved before `${version}` substitution).
     public let versionOverride: String?
