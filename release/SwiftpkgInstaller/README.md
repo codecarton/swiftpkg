@@ -57,3 +57,6 @@ under the Apache License 2.0. Previously published releases remain under the
 license under which they were distributed. See the repository root's
 [`LICENSE`](../../LICENSE), [`NOTICE`](../../NOTICE), and
 [`RELICENSE.md`](../../RELICENSE.md).
+
+The installer places the CLI copies at `/usr/local/share/doc/swiftpkg/` and
+the app copies at `Swiftpkgr.app/Contents/Resources/`.

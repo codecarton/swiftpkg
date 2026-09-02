@@ -6,11 +6,36 @@ BIN="$ROOT/.build/release/swiftpkg"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/swiftpkg-verify.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+CLI_PACKAGE_ROOT="$WORK/cli-package-root"
+APP_RESOURCE_ROOT="$WORK/Swiftpkgr.app/Contents/Resources"
+"$ROOT/scripts/stage-license-docs.sh" \
+    "$CLI_PACKAGE_ROOT/usr/local/share/doc/swiftpkg"
+"$ROOT/scripts/stage-license-docs.sh" "$APP_RESOURCE_ROOT"
+for document in LICENSE NOTICE RELICENSE.md; do
+    cmp "$ROOT/$document" \
+        "$CLI_PACKAGE_ROOT/usr/local/share/doc/swiftpkg/$document"
+    cmp "$ROOT/$document" "$APP_RESOURCE_ROOT/$document"
+done
+
 for tool in /usr/bin/pkgbuild /usr/sbin/pkgutil; do
     if [ ! -x "$tool" ]; then
         printf '%s\n' "missing required macOS tool: $tool" >&2
         exit 2
     fi
+done
+
+LICENSE_PACKAGE="$WORK/license-package.pkg"
+/usr/bin/pkgbuild \
+    --root "$CLI_PACKAGE_ROOT" \
+    --identifier org.swiftpkg.license-test \
+    --version 1.0 \
+    --install-location / \
+    "$LICENSE_PACKAGE" >/dev/null
+LICENSE_PAYLOAD="$WORK/license-payload.txt"
+/usr/sbin/pkgutil --payload-files "$LICENSE_PACKAGE" |
+    sed 's|^\./||' > "$LICENSE_PAYLOAD"
+for document in LICENSE NOTICE RELICENSE.md; do
+    grep -Fxq "usr/local/share/doc/swiftpkg/$document" "$LICENSE_PAYLOAD"
 done
 
 swift build --package-path "$ROOT" -c release

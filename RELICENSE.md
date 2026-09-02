@@ -19,8 +19,12 @@ The `next` branch history and GitHub contributor data identify these human
 contributors for the project material in scope:
 
 - Jordan Calhoun (`jordancalhoun`) authored the original implementation,
-  release automation, website, and app work. Jordan opened issue [#59](https://github.com/codecarton/swiftpkg/issues/59)
-  and is the only repository administrator listed by GitHub.
+  release automation, website, and app work. GitHub identifies Jordan as the
+  author of [issue #59](https://github.com/codecarton/swiftpkg/issues/59), which
+  directs this relicensing, and lists him as the only repository administrator.
+  Those public authorship and repository records are the authority evidence
+  recorded here for Jordan-authored material; no separate consent statement is
+  inferred.
 - Rod Christiansen (`rodchristiansen`) authored 34 commits covering shared
   source, tests, CI templates, and documentation. Rod recorded in [issue #59's
   consent comment](https://github.com/codecarton/swiftpkg/issues/59#issuecomment-5511680426)

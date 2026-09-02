@@ -56,6 +56,8 @@ prepare_installer_project() {
 
     ditto "$template" "$project"
     rm -f "$project/payload/.gitkeep"
+    "$ROOT/scripts/stage-license-docs.sh" \
+        "$project/payload/usr/local/share/doc/swiftpkg"
     /usr/libexec/PlistBuddy -c "Set :version $VERSION" "$project/build-info.plist"
     /usr/libexec/PlistBuddy -c "Set :signing_info:identity $INSTALLER_SIGN_IDENTITY" "$project/build-info.plist"
     /usr/libexec/PlistBuddy -c "Set :notarization_info:keychain_profile $NOTARY_PROFILE" "$project/build-info.plist"
@@ -164,6 +166,8 @@ APP_EXECUTABLE="$APP_PRODUCT/Contents/MacOS/Swiftpkgr"
 [ -x "$CLI_PRODUCT" ] || fail "Xcode did not export the swiftpkg executable"
 [ -x "$APP_EXECUTABLE" ] || fail "Xcode did not export Swiftpkgr.app"
 
+"$ROOT/scripts/stage-license-docs.sh" "$APP_PRODUCT/Contents/Resources"
+
 for product in "$CLI_PRODUCT" "$APP_EXECUTABLE"; do
     PRODUCT_ARCHS=$(lipo -archs "$product")
     case " $PRODUCT_ARCHS " in
@@ -182,8 +186,12 @@ codesign --force --options runtime --timestamp --sign "$APP_SIGN_IDENTITY" "$APP
 codesign --verify --strict --verbose=2 "$CLI_PRODUCT"
 codesign --verify --deep --strict --verbose=2 "$APP_PRODUCT"
 
+CLI_ARCHIVE_ROOT="$WORK/swiftpkg-cli"
+mkdir -p "$CLI_ARCHIVE_ROOT"
+install -m 755 "$CLI_PRODUCT" "$CLI_ARCHIVE_ROOT/swiftpkg"
+"$ROOT/scripts/stage-license-docs.sh" "$CLI_ARCHIVE_ROOT"
 CLI_ARCHIVE="$WORK/swiftpkg-$VERSION.zip"
-ditto -c -k --keepParent "$CLI_PRODUCT" "$CLI_ARCHIVE"
+ditto -c -k --keepParent "$CLI_ARCHIVE_ROOT" "$CLI_ARCHIVE"
 xcrun notarytool submit "$CLI_ARCHIVE" \
     --keychain-profile "$NOTARY_PROFILE" \
     --wait \
@@ -236,6 +244,12 @@ grep -Fxq "usr/local/bin/swiftpkg" "$CLI_PAYLOAD" ||
 if grep -Fq "Applications/Swiftpkgr.app" "$CLI_PAYLOAD"; then
     fail "CLI installer unexpectedly contains Swiftpkgr.app"
 fi
+for document in LICENSE NOTICE RELICENSE.md; do
+    grep -Fxq "usr/local/share/doc/swiftpkg/$document" "$COMBINED_PAYLOAD" ||
+        fail "combined installer does not contain $document"
+    grep -Fxq "usr/local/share/doc/swiftpkg/$document" "$CLI_PAYLOAD" ||
+        fail "CLI installer does not contain $document"
+done
 
 mkdir -p "$DIST"
 rm -f \
@@ -248,13 +262,22 @@ rm -f \
 ditto "$COMBINED_PACKAGE" "$DIST/$COMBINED_PACKAGE_NAME"
 ditto "$CLI_PACKAGE" "$DIST/$CLI_PACKAGE_NAME"
 ditto -c -k --keepParent "$APP_PRODUCT" "$DIST/$APP_ARCHIVE_NAME"
-tar -C "$CLI_PRODUCTS" -czf "$DIST/$TARBALL_NAME" swiftpkg
+tar -C "$CLI_ARCHIVE_ROOT" -czf "$DIST/$TARBALL_NAME" \
+    swiftpkg LICENSE NOTICE RELICENSE.md
+for document in LICENSE NOTICE RELICENSE.md; do
+    tar -tzf "$DIST/$TARBALL_NAME" | sed 's|^\./||' | grep -Fxq "$document" ||
+        fail "CLI archive does not contain $document"
+done
 
 APP_ARCHIVE_VALIDATION="$WORK/app-archive-validation"
 mkdir -p "$APP_ARCHIVE_VALIDATION"
 ditto -x -k "$DIST/$APP_ARCHIVE_NAME" "$APP_ARCHIVE_VALIDATION"
 ARCHIVED_APP="$APP_ARCHIVE_VALIDATION/Swiftpkgr.app"
 [ -d "$ARCHIVED_APP" ] || fail "$APP_ARCHIVE_NAME does not contain Swiftpkgr.app"
+for document in LICENSE NOTICE RELICENSE.md; do
+    [ -f "$ARCHIVED_APP/Contents/Resources/$document" ] ||
+        fail "app archive does not contain $document"
+done
 codesign --verify --deep --strict --verbose=2 "$ARCHIVED_APP"
 xcrun stapler validate "$ARCHIVED_APP"
 spctl --assess --type execute --verbose=4 "$ARCHIVED_APP"
