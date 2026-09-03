@@ -46,7 +46,7 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "required command not found in PATH: $1"
 }
 
-for command in swiftpkg xcodebuild codesign lipo ditto git xcrun security plutil shasum tar awk pkgutil spctl; do
+for command in xcodebuild codesign lipo ditto git xcrun security plutil shasum tar awk pkgutil spctl; do
     require_command "$command"
 done
 
@@ -86,10 +86,6 @@ security find-identity -v | grep -Fq "\"$INSTALLER_SIGN_IDENTITY\"" ||
     fail "Developer ID Installer identity is unavailable: $INSTALLER_SIGN_IDENTITY"
 xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null ||
     fail "notarytool keychain profile is unavailable: $NOTARY_PROFILE"
-
-SWIFTPKG_BIN=$(command -v swiftpkg)
-echo "Using Swiftpkg CLI: $SWIFTPKG_BIN"
-"$SWIFTPKG_BIN" --version
 
 if [ "$MODE" != "--build" ]; then
     require_command gh
@@ -213,7 +209,7 @@ mkdir -p "$COMBINED_PROJECT/payload/Applications"
 mkdir -p "$COMBINED_PROJECT/payload/usr/local/bin"
 ditto "$APP_PRODUCT" "$COMBINED_PROJECT/payload/Applications/Swiftpkgr.app"
 install -m 755 "$CLI_PRODUCT" "$COMBINED_PROJECT/payload/usr/local/bin/swiftpkg"
-"$SWIFTPKG_BIN" "$COMBINED_PROJECT"
+"$CLI_PRODUCT" "$COMBINED_PROJECT"
 
 COMBINED_PACKAGE="$COMBINED_PROJECT/build/$COMBINED_PACKAGE_NAME"
 [ -f "$COMBINED_PACKAGE" ] ||
@@ -224,7 +220,7 @@ CLI_INSTALLER_PROJECT="$WORK/SwiftpkgCLIInstaller"
 prepare_installer_project "$CLI_TEMPLATE" "$CLI_INSTALLER_PROJECT"
 mkdir -p "$CLI_INSTALLER_PROJECT/payload/usr/local/bin"
 install -m 755 "$CLI_PRODUCT" "$CLI_INSTALLER_PROJECT/payload/usr/local/bin/swiftpkg"
-"$SWIFTPKG_BIN" "$CLI_INSTALLER_PROJECT"
+"$CLI_PRODUCT" "$CLI_INSTALLER_PROJECT"
 
 CLI_PACKAGE="$CLI_INSTALLER_PROJECT/build/$CLI_PACKAGE_NAME"
 [ -f "$CLI_PACKAGE" ] ||
