@@ -70,7 +70,8 @@ public protocol ProcessRunning: Sendable {
     func run(executable: String, arguments: [String]) throws -> ProcessResult
 
     /// Runs an executable and throws a structured error when it exits unsuccessfully.
-    func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws
+    @discardableResult
+    func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws -> ProcessResult
 }
 
 public protocol ProcessControlling: Sendable {
@@ -93,11 +94,13 @@ public extension ProcessResult {
 }
 
 public extension ProcessRunning {
-    func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws {
+    @discardableResult
+    func runSuccessfully(executable: String, arguments: [String], failureMessage: String) throws -> ProcessResult {
         let result = try run(executable: executable, arguments: arguments)
         guard result.status == 0 else {
             throw SwiftPkgError.processFailed(tool: URL(fileURLWithPath: executable).lastPathComponent, message: result.failureDetail(fallback: failureMessage))
         }
+        return result
     }
 }
 
@@ -189,6 +192,23 @@ public final class Console: @unchecked Sendable {
         }
     }
 
+    /// Relays output captured from a successful subprocess to the active frontend.
+    public func displayProcessOutput(_ result: ProcessResult) {
+        if let eventHandler {
+            if !quiet {
+                for line in result.stdoutString.split(whereSeparator: \.isNewline) {
+                    eventHandler(.status(String(line)))
+                }
+            }
+            for line in result.stderrString.split(whereSeparator: \.isNewline) {
+                eventHandler(.warning(String(line)))
+            }
+        } else {
+            if !quiet { FileHandle.standardOutput.write(result.stdout) }
+            FileHandle.standardError.write(result.stderr)
+        }
+    }
+
     public func warning(_ message: String) {
         if let eventHandler { eventHandler(.warning(message)) }
         else { writeError("WARNING: \(message)") }
@@ -231,15 +251,6 @@ extension FileManager {
     public func removeIfPresent(at url: URL) throws {
         if fileExists(atPath: url.path) { try removeItem(at: url) }
     }
-}
-
-func xmlEscaped(_ string: String) -> String {
-    string
-        .replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
-        .replacingOccurrences(of: ">", with: "&gt;")
-        .replacingOccurrences(of: "\"", with: "&quot;")
-        .replacingOccurrences(of: "'", with: "&apos;")
 }
 
 func scalarString(_ value: Any?) -> String? {
