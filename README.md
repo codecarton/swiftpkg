@@ -54,27 +54,27 @@ brew uninstall --cask swiftpkgr
 ## Signed release downloads
 
 The signed and notarized
-[swiftpkg 0.3.1 release](https://github.com/codecarton/swiftpkg/releases/tag/v0.3.1)
+[swiftpkg 0.4.0 release](https://github.com/codecarton/swiftpkg/releases/tag/v0.4.0)
 provides these immutable resources:
 
-- [`swiftpkg-0.3.1-combined.pkg`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/swiftpkg-0.3.1-combined.pkg)
+- [`swiftpkg-0.4.0-combined.pkg`](https://github.com/codecarton/swiftpkg/releases/download/v0.4.0/swiftpkg-0.4.0-combined.pkg)
   installs both the CLI and Swiftpkgr and requires macOS 15 or later.
-- [`swiftpkg-0.3.1-cli.pkg`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/swiftpkg-0.3.1-cli.pkg)
+- [`swiftpkg-0.4.0-cli.pkg`](https://github.com/codecarton/swiftpkg/releases/download/v0.4.0/swiftpkg-0.4.0-cli.pkg)
   installs only the CLI and requires macOS 13 or later.
-- [`Swiftpkgr-0.3.1.zip`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/Swiftpkgr-0.3.1.zip)
+- [`Swiftpkgr-0.4.0.zip`](https://github.com/codecarton/swiftpkg/releases/download/v0.4.0/Swiftpkgr-0.4.0.zip)
   contains only the macOS 15+ app.
-- [`swiftpkg-0.3.1-universal.tar.gz`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/swiftpkg-0.3.1-universal.tar.gz)
+- [`swiftpkg-0.4.0-universal.tar.gz`](https://github.com/codecarton/swiftpkg/releases/download/v0.4.0/swiftpkg-0.4.0-universal.tar.gz)
   is the Universal 2 CLI archive consumed by the Homebrew formula.
-- [`SHA256SUMS`](https://github.com/codecarton/swiftpkg/releases/download/v0.3.1/SHA256SUMS)
+- [`SHA256SUMS`](https://github.com/codecarton/swiftpkg/releases/download/v0.4.0/SHA256SUMS)
   covers every downloadable release artifact.
 
 Verify a package download before installation:
 
 ```sh
-grep ' swiftpkg-0.3.1-combined.pkg$' SHA256SUMS | shasum -a 256 -c -
-pkgutil --check-signature swiftpkg-0.3.1-combined.pkg
-xcrun stapler validate swiftpkg-0.3.1-combined.pkg
-sudo installer -pkg swiftpkg-0.3.1-combined.pkg -target /
+grep ' swiftpkg-0.4.0-combined.pkg$' SHA256SUMS | shasum -a 256 -c -
+pkgutil --check-signature swiftpkg-0.4.0-combined.pkg
+xcrun stapler validate swiftpkg-0.4.0-combined.pkg
+sudo installer -pkg swiftpkg-0.4.0-combined.pkg -target /
 swiftpkg --version
 ```
 
@@ -259,7 +259,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: pkg
-        uses: codecarton/swiftpkg@v1
+        uses: codecarton/swiftpkg@v0.4.0
         with:
           project-path: packages/my-project
           version: ${{ github.ref_name }}
