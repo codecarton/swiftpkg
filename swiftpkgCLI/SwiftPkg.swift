@@ -33,9 +33,9 @@ public enum SwiftPkg {
             // status — but only for builds, which are the only command that
             // emits a manifest. Other commands keep their normal output.
             // warnings/errors still go to stderr via Console.
-            let isJSONBuild: Bool
-            if case .build = command { isJSONBuild = options.outputFormat == .json } else { isJSONBuild = false }
-            let console = Console(quiet: options.quiet || isJSONBuild)
+            let isBuild: Bool
+            if case .build = command { isBuild = true } else { isBuild = false }
+            let console = Console(quiet: options.suppressesStatusOutput(isBuild: isBuild))
             do {
                 switch command {
                 case let .create(project, format, force):
