@@ -58,6 +58,18 @@ struct CLITests {
         }
     }
 
+    @Test("JSON build output suppresses package-tool status")
+    func jsonBuildOutputIsQuiet() throws {
+        let options = try parsedOptions(["--output-format", "json", "Project"])
+
+        guard case let .build(_, configuration) = try #require(try CLICommand.resolve(from: options)) else {
+            Issue.record("Expected a build command")
+            return
+        }
+
+        #expect(configuration.isQuiet)
+    }
+
     @Test("reports missing import argument")
     func reportsMissingImportArgument() {
         guard case .failure(let message) = CLIParser.parse(["--import"]) else {

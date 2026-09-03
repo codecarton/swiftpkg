@@ -7,6 +7,22 @@ private final class Box<Value> {
     init(_ value: Value) { self.value = value }
 }
 
+/// Runs a user-visible build tool and relays its successful diagnostic output.
+private func runToolAndDisplayOutput(
+    _ executable: String,
+    arguments: [String],
+    failureMessage: String,
+    runner: any ProcessRunning,
+    console: Console
+) throws {
+    let result = try runner.runSuccessfully(
+        executable: executable,
+        arguments: arguments,
+        failureMessage: failureMessage
+    )
+    console.displayProcessOutput(result)
+}
+
 /// Coordinates the stages that produce, sign, and optionally notarize a package.
 public struct PackageBuildCoordinator: @unchecked Sendable {
     public let fileManager: FileManager
@@ -270,10 +286,16 @@ private struct ComponentPackageBuilder {
         if let scripts = context.effectiveScripts { arguments += ["--scripts", scripts.path] }
         if isQuiet { arguments.append("--quiet") }
         arguments.append(buildOutput.path)
-        try runner.runSuccessfully(executable: ToolPaths.pkgbuild, arguments: arguments, failureMessage: "Package creation failed.")
+        try runToolAndDisplayOutput(
+            ToolPaths.pkgbuild,
+            arguments: arguments,
+            failureMessage: "Package creation failed.",
+            runner: runner,
+            console: console
+        )
         if let signing {
             console.display("Signing component package")
-            try signPackage(at: buildOutput, to: context.output, signing: signing, runner: runner)
+            try signPackage(at: buildOutput, to: context.output, signing: signing, runner: runner, console: console)
         }
     }
 
@@ -287,7 +309,13 @@ private struct ComponentPackageBuilder {
         let destination = temporaryDirectory.appendingPathComponent("component.plist")
         var arguments = ["--analyze", "--root", payload.path, destination.path]
         if isQuiet { arguments.insert("--quiet", at: 0) }
-        try runner.runSuccessfully(executable: ToolPaths.pkgbuild, arguments: arguments, failureMessage: "pkgbuild failed while analyzing payload")
+        try runToolAndDisplayOutput(
+            ToolPaths.pkgbuild,
+            arguments: arguments,
+            failureMessage: "pkgbuild failed while analyzing payload",
+            runner: runner,
+            console: console
+        )
         let data = try Data(contentsOf: destination)
         guard var propertyList = try PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]] else {
             throw SwiftPkgError.message("Couldn't read \(destination.path)")
@@ -315,18 +343,30 @@ private struct DistributionPackageBuilder {
         let requirements = context.layout.project.appendingPathComponent("product-requirements.plist")
         if fileManager.itemExists(at: requirements) { synthesisArguments += ["--product", requirements.path] }
         synthesisArguments += ["--package", context.output.path, distribution.path]
-        try runner.runSuccessfully(executable: ToolPaths.productbuild, arguments: synthesisArguments, failureMessage: "Distribution synthesis failed.")
+        try runToolAndDisplayOutput(
+            ToolPaths.productbuild,
+            arguments: synthesisArguments,
+            failureMessage: "Distribution synthesis failed.",
+            runner: runner,
+            console: console
+        )
         try setTitle(context.configuration.title ?? context.configuration.name, in: distribution)
 
         var arguments = ["--distribution", distribution.path, "--package-path", context.layout.buildDirectory.path]
         if isQuiet { arguments.append("--quiet") }
         arguments += ["--identifier", context.configuration.productIdentifier ?? context.configuration.identifier, "--version", context.configuration.version, unsignedOutput.path]
-        try runner.runSuccessfully(executable: ToolPaths.productbuild, arguments: arguments, failureMessage: "Distribution package creation failed.")
+        try runToolAndDisplayOutput(
+            ToolPaths.productbuild,
+            arguments: arguments,
+            failureMessage: "Distribution package creation failed.",
+            runner: runner,
+            console: console
+        )
         let finalOutput: URL
         if let signing = skipsSigning ? nil : context.configuration.signing {
             console.display("Signing distribution package")
             let signedOutput = context.temporaryDirectory.appendingPathComponent("Signed-\(context.configuration.name)")
-            try signPackage(at: unsignedOutput, to: signedOutput, signing: signing, runner: runner)
+            try signPackage(at: unsignedOutput, to: signedOutput, signing: signing, runner: runner, console: console)
             finalOutput = signedOutput
         } else {
             finalOutput = unsignedOutput
@@ -380,7 +420,13 @@ struct NotarizationService: Sendable {
         guard accepted, !skipsStapling else { return Outcome(accepted: accepted, stapled: false) }
         console.display("Stapling package")
         do {
-            try runner.runSuccessfully(executable: ToolPaths.xcrun, arguments: ["stapler", "staple", package.path], failureMessage: "Stapling failed")
+            try runToolAndDisplayOutput(
+                ToolPaths.xcrun,
+                arguments: ["stapler", "staple", package.path],
+                failureMessage: "Stapling failed",
+                runner: runner,
+                console: console
+            )
         } catch {
             throw SwiftPkgError.notarizationFailed(String(describing: error))
         }
@@ -456,13 +502,20 @@ private func signPackage(
     at unsignedPackage: URL,
     to signedPackage: URL,
     signing: SigningConfiguration,
-    runner: any ProcessRunning
+    runner: any ProcessRunning,
+    console: Console
 ) throws {
     var arguments: [String] = []
     appendSigningArguments(&arguments, signing: signing)
     arguments += [unsignedPackage.path, signedPackage.path]
     do {
-        try runner.runSuccessfully(executable: ToolPaths.productsign, arguments: arguments, failureMessage: "Package signing failed.")
+        try runToolAndDisplayOutput(
+            ToolPaths.productsign,
+            arguments: arguments,
+            failureMessage: "Package signing failed.",
+            runner: runner,
+            console: console
+        )
     } catch let SwiftPkgError.processFailed(tool, message) {
         throw SwiftPkgError.signingFailed(tool: tool, message: message)
     } catch {

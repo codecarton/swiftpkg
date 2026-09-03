@@ -78,6 +78,11 @@ public struct CLIOptions: ParsableArguments {
     @Argument(help: "The package project directory.")
     public var projectDirectory: String?
 
+    /// Whether this invocation reserves stdout for machine-readable build output.
+    public func suppressesStatusOutput(isBuild: Bool) -> Bool {
+        quiet || (isBuild && outputFormat == .json)
+    }
+
     public init() {}
 }
 
@@ -119,7 +124,7 @@ public enum CLICommand {
             configuration: PackageBuildOptions(
                 requestedFormat: requestedFormat,
                 exportsBOM: options.exportBOMInfo,
-                isQuiet: options.quiet,
+                isQuiet: options.suppressesStatusOutput(isBuild: true),
                 skipsSigning: options.skipSigning,
                 skipsNotarization: options.skipNotarization,
                 skipsStapling: options.skipStapling,
