@@ -22,6 +22,8 @@ struct DistributionVerificationTests {
         runner.onRun = { executable, arguments in
             if executable == ToolPaths.pkgbuild, arguments.first == "--analyze" {
                 try write("<?xml version=\"1.0\"?><plist version=\"1.0\"><array/></plist>", to: URL(fileURLWithPath: arguments.last!))
+            } else if executable == ToolPaths.productbuild, arguments.first == "--synthesize" {
+                try write("<?xml version=\"1.0\"?><installer-gui-script/>", to: URL(fileURLWithPath: arguments.last!))
             } else if executable == ToolPaths.pkgbuild || executable == ToolPaths.productbuild {
                 try write("fake package", to: URL(fileURLWithPath: arguments.last!))
             } else if executable == ToolPaths.pkgutil, arguments.first == "--expand" {

@@ -192,6 +192,11 @@ struct ExitCodeTests {
             }
             if executable == ToolPaths.productbuild,
                executable != failingExecutable,
+               arguments.first == "--synthesize",
+               let output = arguments.last {
+                try write("<?xml version=\"1.0\"?><installer-gui-script/>", to: URL(fileURLWithPath: output))
+            } else if executable == ToolPaths.productbuild,
+               executable != failingExecutable,
                let output = arguments.last {
                 try write("distribution", to: URL(fileURLWithPath: output))
             }

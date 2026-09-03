@@ -233,15 +233,6 @@ extension FileManager {
     }
 }
 
-func xmlEscaped(_ string: String) -> String {
-    string
-        .replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
-        .replacingOccurrences(of: ">", with: "&gt;")
-        .replacingOccurrences(of: "\"", with: "&quot;")
-        .replacingOccurrences(of: "'", with: "&apos;")
-}
-
 func scalarString(_ value: Any?) -> String? {
     if let string = value as? String { return string }
     if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
