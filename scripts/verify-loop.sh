@@ -223,11 +223,13 @@ esac
 
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
-printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true,' '  "product id": "com.example.distribution.product"' '}' > "$DISTRIBUTION/build-info.json"
+printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "min-os-version": "12.0",' '  "distribution_style": true,' '  "product id": "com.example.distribution.product"' '}' > "$DISTRIBUTION/build-info.json"
 printf '%s\n' 'distribution' > "$DISTRIBUTION/payload/distribution.txt"
 run "$BIN" --verify "$DISTRIBUTION"
 test -f "$DISTRIBUTION/build/Distribution-2.0.pkg"
 run /usr/sbin/pkgutil --expand "$DISTRIBUTION/build/Distribution-2.0.pkg" "$WORK/expanded-distribution"
 test -f "$WORK/expanded-distribution/Distribution"
+grep -Fq '<title>Distribution 2.0</title>' "$WORK/expanded-distribution/Distribution"
+grep -Eq '<os-version min="12\.0(\.0)?"/>' "$WORK/expanded-distribution/Distribution"
 
 printf '%s\n' "verification passed: $WORK"

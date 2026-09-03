@@ -310,13 +310,16 @@ private struct DistributionPackageBuilder {
     func buildDistribution(using context: PackageBuildContext, isQuiet: Bool, skipsSigning: Bool) throws {
         let unsignedOutput = context.temporaryDirectory.appendingPathComponent("Unsigned-\(context.configuration.name)")
         let distribution = context.temporaryDirectory.appendingPathComponent("Distribution")
-        let title = context.configuration.title ?? context.configuration.name
-        let xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><installer-gui-script minSpecVersion=\"1\"><title>\(xmlEscaped(title))</title><options customize=\"never\" require-scripts=\"false\" hostArchitectures=\"arm64,x86_64\"/><choices-outline><line choice=\"default\"/></choices-outline><choice id=\"default\" visible=\"false\"><pkg-ref id=\"default\"/></choice><pkg-ref id=\"default\">\(xmlEscaped(context.configuration.name))</pkg-ref></installer-gui-script>"
-        try Data(xml.utf8).write(to: distribution)
+        var synthesisArguments = ["--synthesize"]
+        if isQuiet { synthesisArguments.append("--quiet") }
+        let requirements = context.layout.project.appendingPathComponent("product-requirements.plist")
+        if fileManager.itemExists(at: requirements) { synthesisArguments += ["--product", requirements.path] }
+        synthesisArguments += ["--package", context.output.path, distribution.path]
+        try runner.runSuccessfully(executable: ToolPaths.productbuild, arguments: synthesisArguments, failureMessage: "Distribution synthesis failed.")
+        try setTitle(context.configuration.title ?? context.configuration.name, in: distribution)
+
         var arguments = ["--distribution", distribution.path, "--package-path", context.layout.buildDirectory.path]
         if isQuiet { arguments.append("--quiet") }
-        let requirements = context.layout.project.appendingPathComponent("product-requirements.plist")
-        if fileManager.itemExists(at: requirements) { arguments += ["--product", requirements.path] }
         arguments += ["--identifier", context.configuration.productIdentifier ?? context.configuration.identifier, "--version", context.configuration.version, unsignedOutput.path]
         try runner.runSuccessfully(executable: ToolPaths.productbuild, arguments: arguments, failureMessage: "Distribution package creation failed.")
         let finalOutput: URL
@@ -332,6 +335,19 @@ private struct DistributionPackageBuilder {
         try fileManager.removeItem(at: context.output)
         console.display("Renaming distribution package \(finalOutput.path) to \(context.output.path)")
         try fileManager.moveItem(at: finalOutput, to: context.output)
+    }
+
+    private func setTitle(_ title: String, in distribution: URL) throws {
+        let document = try XMLDocument(contentsOf: distribution)
+        guard let root = document.rootElement(), root.name == "installer-gui-script" else {
+            throw SwiftPkgError.message("productbuild synthesized an invalid Distribution document.")
+        }
+        if let titleElement = root.elements(forName: "title").first {
+            titleElement.stringValue = title
+        } else {
+            root.insertChild(XMLElement(name: "title", stringValue: title), at: 0)
+        }
+        try document.xmlData(options: [.nodePrettyPrint]).write(to: distribution, options: .atomic)
     }
 }
 
