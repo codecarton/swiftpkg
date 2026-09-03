@@ -6,11 +6,38 @@ BIN="$ROOT/.build/release/swiftpkg"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/swiftpkg-verify.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+"$ROOT/scripts/test-ci-templates.sh"
+
+CLI_PACKAGE_ROOT="$WORK/cli-package-root"
+APP_RESOURCE_ROOT="$WORK/Swiftpkgr.app/Contents/Resources"
+"$ROOT/scripts/stage-license-docs.sh" \
+    "$CLI_PACKAGE_ROOT/usr/local/share/doc/swiftpkg"
+"$ROOT/scripts/stage-license-docs.sh" "$APP_RESOURCE_ROOT"
+for document in LICENSE NOTICE RELICENSE.md; do
+    cmp "$ROOT/$document" \
+        "$CLI_PACKAGE_ROOT/usr/local/share/doc/swiftpkg/$document"
+    cmp "$ROOT/$document" "$APP_RESOURCE_ROOT/$document"
+done
+
 for tool in /usr/bin/pkgbuild /usr/sbin/pkgutil; do
     if [ ! -x "$tool" ]; then
         printf '%s\n' "missing required macOS tool: $tool" >&2
         exit 2
     fi
+done
+
+LICENSE_PACKAGE="$WORK/license-package.pkg"
+/usr/bin/pkgbuild \
+    --root "$CLI_PACKAGE_ROOT" \
+    --identifier org.swiftpkg.license-test \
+    --version 1.0 \
+    --install-location / \
+    "$LICENSE_PACKAGE" >/dev/null
+LICENSE_PAYLOAD="$WORK/license-payload.txt"
+/usr/sbin/pkgutil --payload-files "$LICENSE_PACKAGE" |
+    sed 's|^\./||' > "$LICENSE_PAYLOAD"
+for document in LICENSE NOTICE RELICENSE.md; do
+    grep -Fxq "usr/local/share/doc/swiftpkg/$document" "$LICENSE_PAYLOAD"
 done
 
 swift build --package-path "$ROOT" -c release
@@ -58,6 +85,16 @@ run "$BIN" "$EMPTY"
 run /usr/sbin/pkgutil --expand "$EMPTY/build/EmptyPayload-1.0.pkg" "$WORK/expanded-empty"
 test -e "$WORK/expanded-empty/Payload"
 
+RECEIPT="$WORK/ReceiptOnly"
+run "$BIN" --create "$RECEIPT"
+rm -rf "$RECEIPT/payload" "$RECEIPT/scripts"
+run "$BIN" --lint "$RECEIPT"
+run "$BIN" "$RECEIPT"
+run /usr/sbin/pkgutil --expand "$RECEIPT/build/ReceiptOnly-1.0.pkg" "$WORK/expanded-receipt"
+test ! -e "$WORK/expanded-receipt/Payload"
+test ! -e "$WORK/expanded-receipt/Scripts"
+printf 'receipt-only package OK\n'
+
 for format in json yaml; do
     PROJECT_FORMAT="$WORK/Format-$format"
     if [ "$format" = json ]; then
@@ -71,11 +108,124 @@ for format in json yaml; do
     test -f "$PROJECT_FORMAT/build/Format-$format-1.0.pkg"
 done
 
+ENVSUB="$WORK/EnvSub"
+run "$BIN" --create "$ENVSUB"
+mkdir -p "$ENVSUB/payload/usr/local/bin"
+printf 'x\n' > "$ENVSUB/payload/usr/local/bin/tool"
+printf '%s\n' '#!/bin/sh' 'echo "server=${SERVER_URL}"' 'exit 0' > "$ENVSUB/scripts/postinstall"
+printf 'SERVER_URL=https://mdm.example.edu\n' > "$ENVSUB/.env"
+run "$BIN" "$ENVSUB"
+run /usr/sbin/pkgutil --expand "$ENVSUB/build/EnvSub-1.0.pkg" "$WORK/expanded-envsub"
+POSTINSTALL="$WORK/expanded-envsub/Scripts/postinstall"
+test -f "$POSTINSTALL"
+grep -q 'server=https://mdm.example.edu' "$POSTINSTALL"
+if grep -q '\${SERVER_URL}' "$POSTINSTALL"; then
+    printf 'placeholder was not substituted\n' >&2; exit 1
+fi
+printf 'env substitution OK\n'
+
+PROVENANCE="$WORK/Provenance"
+run "$BIN" --create "$PROVENANCE"
+mkdir -p "$PROVENANCE/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$PROVENANCE/payload/usr/local/bin/tool"
+run "$BIN" --provenance "$PROVENANCE"
+test -f "$PROVENANCE/build/Provenance-1.0.pkg.provenance.json"
+python3 - "$PROVENANCE/build/Provenance-1.0.pkg.provenance.json" "$PROVENANCE/build/Provenance-1.0.pkg" <<'PY'
+import hashlib, json, sys
+prov = json.load(open(sys.argv[1]))
+for key in ("tool", "tool_version", "built_at", "name", "version", "identifier", "pkg_path", "sha256", "input_digest"):
+    assert key in prov, f"provenance missing key: {key}"
+assert prov["tool"] == "swiftpkg"
+digest = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+assert prov["sha256"] == digest, f'sha256 mismatch: {prov["sha256"]} != {digest}'
+assert len(prov["input_digest"]) == 64
+print("provenance OK")
+PY
+
+VERIFY="$WORK/Verify"
+run "$BIN" --create "$VERIFY"
+mkdir -p "$VERIFY/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$VERIFY/payload/usr/local/bin/tool"
+run "$BIN" --verify "$VERIFY"
+test -f "$VERIFY/build/Verify-1.0.pkg"
+
+LINTGOOD="$WORK/LintGood"
+run "$BIN" --create "$LINTGOOD"
+mkdir -p "$LINTGOOD/payload"
+printf 'x\n' > "$LINTGOOD/payload/file.txt"
+run "$BIN" --lint "$LINTGOOD"
+LINTBAD="$WORK/LintBad"
+mkdir -p "$LINTBAD/payload"
+printf 'x\n' > "$LINTBAD/payload/file.txt"
+printf '%s\n' '{"name":"../evil.pkg","identifier":"com.example.bad","version":""}' > "$LINTBAD/build-info.json"
+if "$BIN" --lint "$LINTBAD"; then
+    printf 'lint should have failed on a bad project\n' >&2
+    exit 1
+fi
+printf 'lint rejects bad project OK\n'
+
+MANIFEST="$WORK/Manifest"
+run "$BIN" --create "$MANIFEST"
+mkdir -p "$MANIFEST/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$MANIFEST/payload/usr/local/bin/tool"
+chmod +x "$MANIFEST/payload/usr/local/bin/tool"
+printf '+ %s\n' "$BIN --output-format json $MANIFEST"
+"$BIN" --output-format json "$MANIFEST" > "$WORK/manifest.json"
+python3 - "$WORK/manifest.json" "$MANIFEST/build/Manifest-1.0.pkg" <<'PY'
+import hashlib, json, os.path, sys
+
+# Explicit checks that raise, rather than assert: `python3 -O`/PYTHONOPTIMIZE
+# strips assert statements, which would let a bad manifest print "manifest OK".
+def fail(message):
+    print("manifest check failed:", message, file=sys.stderr)
+    raise SystemExit(1)
+
+manifest = json.load(open(sys.argv[1]))
+for key in ("name", "version", "identifier", "pkg_path", "sha256", "signed", "notarized", "stapled"):
+    if key not in manifest:
+        fail(f"missing key: {key}")
+if manifest["name"] != "Manifest-1.0.pkg":
+    fail(f'name: {manifest["name"]}')
+if manifest["version"] != "1.0":
+    fail(f'version: {manifest["version"]}')
+if manifest["identifier"] != "org.swiftpkg.pkg.Manifest":
+    fail(f'identifier: {manifest["identifier"]}')
+if not (manifest["signed"] is False and manifest["notarized"] is False and manifest["stapled"] is False):
+    fail("signed/notarized/stapled are not all false")
+if os.path.normpath(manifest["pkg_path"]) != os.path.normpath(sys.argv[2]):
+    fail(f'pkg_path: {manifest["pkg_path"]}')
+if not os.path.isfile(manifest["pkg_path"]):
+    fail(f'pkg not found: {manifest["pkg_path"]}')
+digest = hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest()
+if manifest["sha256"] != digest:
+    fail(f'sha256 mismatch: {manifest["sha256"]} != {digest}')
+print("manifest OK")
+PY
+
+OVERRIDE="$WORK/Override"
+run "$BIN" --create "$OVERRIDE"
+mkdir -p "$OVERRIDE/payload/usr/local/bin"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$OVERRIDE/payload/usr/local/bin/tool"
+run "$BIN" --pkg-version 3.1.4 --output-dir "$WORK/artifacts" "$OVERRIDE"
+test -f "$WORK/artifacts/Override-3.1.4.pkg"
+test ! -e "$OVERRIDE/build/Override-3.1.4.pkg"
+
+DYNAMIC="$WORK/Dynamic"
+run "$BIN" --create --json "$DYNAMIC"
+printf '%s\n' '{' '  "name": "Dyn-${version}.pkg",' '  "identifier": "com.example.dynamic",' '  "version": "${DATE}"' '}' > "$DYNAMIC/build-info.json"
+printf '%s\n' 'dyn' > "$DYNAMIC/payload/marker.txt"
+run "$BIN" "$DYNAMIC"
+DYN_PKG=$(ls "$DYNAMIC/build/")
+case "$DYN_PKG" in
+    Dyn-[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].pkg) printf 'dynamic version OK: %s\n' "$DYN_PKG" ;;
+    *) printf 'unexpected dynamic package name: %s\n' "$DYN_PKG" >&2; exit 1 ;;
+esac
+
 DISTRIBUTION="$WORK/Distribution"
 run "$BIN" --create --json "$DISTRIBUTION"
-printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true' '}' > "$DISTRIBUTION/build-info.json"
+printf '%s\n' '{' '  "name": "Distribution-${version}.pkg",' '  "identifier": "com.example.distribution",' '  "version": "2.0",' '  "title": "Distribution 2.0",' '  "ownership": "recommended",' '  "postinstall_action": "none",' '  "distribution_style": true,' '  "product id": "com.example.distribution.product"' '}' > "$DISTRIBUTION/build-info.json"
 printf '%s\n' 'distribution' > "$DISTRIBUTION/payload/distribution.txt"
-run "$BIN" "$DISTRIBUTION"
+run "$BIN" --verify "$DISTRIBUTION"
 test -f "$DISTRIBUTION/build/Distribution-2.0.pkg"
 run /usr/sbin/pkgutil --expand "$DISTRIBUTION/build/Distribution-2.0.pkg" "$WORK/expanded-distribution"
 test -f "$WORK/expanded-distribution/Distribution"

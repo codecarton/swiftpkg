@@ -1,0 +1,294 @@
+# Azure DevOps steps template that builds an Apple installer package from a
+# swiftpkg project directory — the ADO equivalent of this repo's GitHub
+# composite action (action.yml). It installs the swiftpkg release package,
+# optionally lints, builds with --output-format json, and exposes the result
+# as output variables on the 'build' step.
+#
+# Usage from a pipeline in another repo. Reference swiftpkg as a repository
+# resource, then include this template:
+#
+#   resources:
+#     repositories:
+#       - repository: swiftpkg
+#         type: github
+#         name: codecarton/swiftpkg
+#         endpoint: <your GitHub service connection>
+#
+#   steps:
+#     - template: azure-pipelines/swiftpkg-build.yml@swiftpkg
+#       parameters:
+#         projectPath: packages/my-package-project
+#         version: $(Build.SourceBranchName)
+#         lint: true
+#
+# Outputs (from the step named 'build'):
+#   $(build.pkgPath)  $(build.version)  $(build.sha256)
+#
+# Must run on a macOS agent (pool: { vmImage: 'macOS-latest' }).
+
+parameters:
+  - name: projectPath
+    type: string
+  - name: version
+    type: string
+    default: ''
+  - name: outputDir
+    type: string
+    default: 'dist'
+  - name: swiftpkgVersion
+    type: string
+    # v0.4.0 is the first release that provides the flags and JSON manifest
+    # consumed by this template. The install step also validates the binary.
+    default: 'v0.4.0'
+  - name: swiftpkgSha256
+    type: string
+    default: ''
+  - name: expectedTeamId
+    type: string
+    default: 'DPXY7JLK67'
+  - name: lint
+    type: boolean
+    default: false
+  - name: verify
+    type: boolean
+    default: false
+  - name: provenance
+    type: boolean
+    default: false
+  - name: extraArgs
+    type: string
+    default: ''
+
+steps:
+  - bash: |
+      # BEGIN SWIFTPKG_INSTALL_CONTRACT
+      set -euo pipefail
+      # Azure supplies this parameter default before the step runs. Keep the
+      # shell fallback as a safety net for callers that invoke the step body
+      # in a different runner or test harness.
+      SWIFTPKG_VERSION="${SWIFTPKG_VERSION:-v0.4.0}"
+      export SWIFTPKG_VERSION
+      if ! command -v jq >/dev/null 2>&1; then
+        echo "##vso[task.logissue type=error]jq is required but was not found. Install it (e.g. 'brew install jq')."
+        exit 1
+      fi
+      repo="codecarton/swiftpkg"
+      if [ "$SWIFTPKG_VERSION" = "latest" ]; then
+        api="https://api.github.com/repos/$repo/releases/latest"
+      else
+        api="https://api.github.com/repos/$repo/releases/tags/$SWIFTPKG_VERSION"
+      fi
+      # A release publishes swiftpkg-<version>-cli.pkg (the CLI alone),
+      # swiftpkg-<version>-combined.pkg (CLI + Swiftpkgr), and SHA256SUMS. CI
+      # wants the CLI. The name embeds the version, so resolve the asset URL from
+      # the release metadata rather than guessing the filename. Reject ambiguity
+      # before downloading or installing anything as root.
+      release="$(curl -fsSL "$api")"
+      asset_count="$(printf '%s' "$release" | jq -er '[.assets[] | select(.name | test("swiftpkg-.*-cli\\.pkg$"))] | length')" || asset_count=0
+      if [ "$asset_count" -ne 1 ]; then
+        echo "##vso[task.logissue type=error]Expected exactly one swiftpkg CLI package asset for '$SWIFTPKG_VERSION', found $asset_count."
+        exit 1
+      fi
+      url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name | test("swiftpkg-.*-cli\\.pkg$")) | .browser_download_url)')" || url=""
+      if [ -z "$url" ]; then
+        echo "##vso[task.logissue type=error]Could not resolve the swiftpkg CLI package asset URL for '$SWIFTPKG_VERSION'."
+        exit 1
+      fi
+      sums_url="$(printf '%s' "$release" | jq -er 'first(.assets[] | select(.name == "SHA256SUMS") | .browser_download_url)')" || sums_url=""
+      if [ -z "$sums_url" ]; then
+        echo "##vso[task.logissue type=error]Release '$SWIFTPKG_VERSION' publishes no SHA256SUMS."
+        exit 1
+      fi
+      asset="$(basename "$url")"
+      dest="$AGENT_TEMPDIRECTORY/$asset"
+      sums="$AGENT_TEMPDIRECTORY/SHA256SUMS"
+      curl -fsSL --retry 3 --retry-delay 2 -o "$dest" "$url"
+      curl -fsSL --retry 3 --retry-delay 2 -o "$sums" "$sums_url"
+
+      # Three checks, each covering what the others cannot. Only the caller's own
+      # swiftpkgSha256 pins the bytes against a release asset being replaced in
+      # place; SHA256SUMS ships from the same release, so it catches a truncated
+      # or corrupted download but moves with the release; and the signature is
+      # what makes a substituted asset unusable, since forging it requires the
+      # publisher's Developer ID certificate.
+      actual="$(shasum -a 256 "$dest" | awk '{print $1}')"
+      if [ -n "$SWIFTPKG_SHA256" ] && [ "$actual" != "$SWIFTPKG_SHA256" ]; then
+        echo "##vso[task.logissue type=error]Installer SHA-256 does not match swiftpkgSha256: expected $SWIFTPKG_SHA256, got $actual"
+        exit 1
+      fi
+      published="$(awk -v name="$asset" '$2 == name { print $1 }' "$sums")"
+      if [ -z "$published" ]; then
+        echo "##vso[task.logissue type=error]SHA256SUMS has no entry for $asset."
+        exit 1
+      fi
+      if [ "$actual" != "$published" ]; then
+        echo "##vso[task.logissue type=error]Installer SHA-256 does not match SHA256SUMS: expected $published, got $actual"
+        exit 1
+      fi
+
+      # Assess before running the installer as root. spctl establishes that Apple
+      # notarized it; the Team ID establishes who signed it, which notarization
+      # alone does not.
+      signature="$(pkgutil --check-signature "$dest")"
+      printf '%s\n' "$signature"
+      case "$signature" in
+        *"($EXPECTED_TEAM_ID)"*) ;;
+        *)
+          echo "##vso[task.logissue type=error]Installer is not signed by Team ID $EXPECTED_TEAM_ID."
+          exit 1
+          ;;
+      esac
+      spctl --assess --type install -vv "$dest"
+
+      sudo installer -pkg "$dest" -target /
+
+      # BEGIN SWIFTPKG_COMPATIBILITY_CONTRACT
+      # Keep this check immediately after installation. A release can pass
+      # the installer checks and still predate the flags used below.
+      version_at_least() {
+        local actual="$1"
+        local required="$2"
+        local actual_major actual_minor actual_patch actual_tail
+        local required_major required_minor required_patch required_tail
+
+        case "$actual" in
+          *.*.*) ;;
+          *) return 1 ;;
+        esac
+        actual_major="${actual%%.*}"
+        actual_tail="${actual#*.}"
+        actual_minor="${actual_tail%%.*}"
+        actual_patch="${actual_tail#*.}"
+        case "$actual_patch" in
+          ''|*.*) return 1 ;;
+        esac
+
+        case "$required" in
+          *.*.*) ;;
+          *) return 1 ;;
+        esac
+        required_major="${required%%.*}"
+        required_tail="${required#*.}"
+        required_minor="${required_tail%%.*}"
+        required_patch="${required_tail#*.}"
+        case "$required_patch" in
+          ''|*.*) return 1 ;;
+        esac
+
+        for component in \
+          "$actual_major" "$actual_minor" "$actual_patch" \
+          "$required_major" "$required_minor" "$required_patch"; do
+          case "$component" in
+            ''|*[!0-9]*) return 1 ;;
+          esac
+        done
+
+        if [ "$actual_major" -lt "$required_major" ] ||
+           { [ "$actual_major" -eq "$required_major" ] && [ "$actual_minor" -lt "$required_minor" ]; } ||
+           { [ "$actual_major" -eq "$required_major" ] && [ "$actual_minor" -eq "$required_minor" ] && [ "$actual_patch" -lt "$required_patch" ]; }; then
+          return 1
+        fi
+      }
+
+      require_compatible_swiftpkg() {
+        local required_version='0.4.0'
+        local installed_version help missing option
+        local required_options=(
+          '--output-format'
+          '--output-dir'
+          '--pkg-version'
+          '--lint'
+          '--verify'
+          '--provenance'
+        )
+
+        if ! installed_version="$(swiftpkg --version 2>&1)"; then
+          echo "##vso[task.logissue type=error]swiftpkg compatibility check failed: could not run swiftpkg --version."
+          exit 1
+        fi
+        if ! version_at_least "$installed_version" "$required_version"; then
+          echo "##vso[task.logissue type=error]swiftpkg $installed_version is incompatible with this CI template; requires swiftpkg >= $required_version (the release must provide --output-format, --output-dir, --pkg-version, --lint, --verify, and --provenance)."
+          exit 1
+        fi
+        if ! help="$(swiftpkg --help 2>&1)"; then
+          echo "##vso[task.logissue type=error]swiftpkg $installed_version is incompatible with this CI template: swiftpkg --help could not be read."
+          exit 1
+        fi
+
+        missing=''
+        for option in "${required_options[@]}"; do
+          if ! grep -Fq -- "$option" <<< "$help"; then
+            if [ -n "$missing" ]; then missing="$missing, "; fi
+            missing="$missing$option"
+          fi
+        done
+        if [ -n "$missing" ]; then
+          echo "##vso[task.logissue type=error]swiftpkg $installed_version is incompatible with this CI template: missing required option(s): $missing. Install swiftpkg >= $required_version."
+          exit 1
+        fi
+        echo "Using swiftpkg $installed_version (CI contract requires >= $required_version)."
+      }
+
+      require_compatible_swiftpkg
+      # END SWIFTPKG_COMPATIBILITY_CONTRACT
+      # END SWIFTPKG_INSTALL_CONTRACT
+    displayName: 'Install swiftpkg'
+    env:
+      SWIFTPKG_VERSION: ${{ parameters.swiftpkgVersion }}
+      SWIFTPKG_SHA256: ${{ parameters.swiftpkgSha256 }}
+      EXPECTED_TEAM_ID: ${{ parameters.expectedTeamId }}
+
+  - ${{ if eq(parameters.lint, true) }}:
+      - bash: swiftpkg --lint "$PROJECT_PATH"
+        displayName: 'Lint package project'
+        env:
+          PROJECT_PATH: ${{ parameters.projectPath }}
+
+  - bash: |
+      # BEGIN SWIFTPKG_BUILD_CONTRACT
+      set -euo pipefail
+      # extra-args first so the template's required flags always win and can't be
+      # overridden into a shape that breaks jq parsing.
+      args=()
+      if [ -n "$EXTRA_ARGS" ]; then
+        read -ra extra <<< "$EXTRA_ARGS"
+        args+=("${extra[@]}")
+      fi
+      args+=(--output-format json --output-dir "$OUTPUT_DIR")
+      if [ -n "$PKG_VERSION" ]; then
+        args+=(--pkg-version "$PKG_VERSION")
+      fi
+      # Azure renders booleans as True/False; accept any case.
+      if [ "$(echo "$DO_VERIFY" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+        args+=(--verify)
+      fi
+      if [ "$(echo "$DO_PROVENANCE" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+        args+=(--provenance)
+      fi
+      result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
+      echo "$result"
+      # Extract with `jq -er` so a null/missing field fails the step rather than
+      # silently publishing an empty output variable, and strip any CR/LF so the
+      # value can't inject a second Azure logging command.
+      emit() { printf '%s' "$1" | tr -d '\r\n'; }
+      manifest_value() {
+        local key="$1"
+        printf '%s' "$result" | jq -er --arg key "$key" \
+          '.[$key] | select(type == "string") | select(length > 0) | select((contains("\r") | not) and (contains("\n") | not))'
+      }
+      pkg_path="$(manifest_value pkg_path)"
+      version="$(manifest_value version)"
+      sha256="$(manifest_value sha256)"
+      echo "##vso[task.setvariable variable=pkgPath;isOutput=true]$(emit "$pkg_path")"
+      echo "##vso[task.setvariable variable=version;isOutput=true]$(emit "$version")"
+      echo "##vso[task.setvariable variable=sha256;isOutput=true]$(emit "$sha256")"
+      # END SWIFTPKG_BUILD_CONTRACT
+    name: build
+    displayName: 'Build package'
+    env:
+      PROJECT_PATH: ${{ parameters.projectPath }}
+      PKG_VERSION: ${{ parameters.version }}
+      OUTPUT_DIR: ${{ parameters.outputDir }}
+      DO_VERIFY: ${{ parameters.verify }}
+      DO_PROVENANCE: ${{ parameters.provenance }}
+      EXTRA_ARGS: ${{ parameters.extraArgs }}

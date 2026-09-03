@@ -1,0 +1,275 @@
+name: 'swiftpkg build'
+description: 'Build an Apple installer package from a swiftpkg project directory'
+author: 'codecarton'
+
+inputs:
+  project-path:
+    description: 'Path to the swiftpkg package project directory'
+    required: true
+  version:
+    description: 'Override the build-info version (e.g. a git tag). Maps to --pkg-version.'
+    required: false
+    default: ''
+  output-dir:
+    description: 'Directory to write the built package into. Maps to --output-dir.'
+    required: false
+    default: 'dist'
+  swiftpkg-version:
+    description: 'Release tag of swiftpkg to install. The default is the first release with the CI contract; selected releases must be v0.4.0 or newer.'
+    required: false
+    default: 'v0.4.0'
+  swiftpkg-sha256:
+    description: 'Expected SHA-256 of the installer asset. Set it to pin the exact bytes; release assets are mutable, so a tag alone does not.'
+    required: false
+    default: ''
+  expected-team-id:
+    description: 'Apple Developer Team ID the installer must be signed by.'
+    required: false
+    default: 'DPXY7JLK67'
+  lint:
+    description: 'If "true", run `swiftpkg --lint` before building and fail on lint errors.'
+    required: false
+    default: 'false'
+  verify:
+    description: 'If "true", pass --verify so a signed/notarized build is checked after building.'
+    required: false
+    default: 'false'
+  provenance:
+    description: 'If "true", pass --provenance to write a <pkg>.provenance.json sidecar.'
+    required: false
+    default: 'false'
+  extra-args:
+    description: 'Additional arguments appended to the swiftpkg build invocation.'
+    required: false
+    default: ''
+
+outputs:
+  pkg-path:
+    description: 'Path to the built package'
+    value: ${{ steps.build.outputs.pkg-path }}
+  version:
+    description: 'Version of the built package'
+    value: ${{ steps.build.outputs.version }}
+  sha256:
+    description: 'SHA-256 of the built package'
+    value: ${{ steps.build.outputs.sha256 }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install swiftpkg
+      shell: bash
+      env:
+        SWIFTPKG_VERSION: ${{ inputs.swiftpkg-version }}
+        SWIFTPKG_SHA256: ${{ inputs.swiftpkg-sha256 }}
+        EXPECTED_TEAM_ID: ${{ inputs.expected-team-id }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # BEGIN SWIFTPKG_INSTALL_CONTRACT
+        set -euo pipefail
+        # GitHub supplies this input default before the step runs. Keep the
+        # shell fallback as a safety net for callers that invoke the step body
+        # in a different runner or test harness.
+        SWIFTPKG_VERSION="${SWIFTPKG_VERSION:-v0.4.0}"
+        export SWIFTPKG_VERSION
+        runner_tmp="${RUNNER_TEMP:-/tmp}"
+        # Download into a fresh directory so a stale or unexpected package left
+        # in the runner temp can't be picked up.
+        download_dir="$(mktemp -d "$runner_tmp/swiftpkg-install.XXXXXX")"
+        # A release publishes swiftpkg-<version>-cli.pkg (the CLI alone),
+        # swiftpkg-<version>-combined.pkg (CLI + Swiftpkgr), and SHA256SUMS. CI
+        # wants the CLI. The version is embedded in the filename, so match it
+        # with a pattern rather than a fixed URL.
+        args=(--repo codecarton/swiftpkg --pattern 'swiftpkg-*-cli.pkg' --pattern 'SHA256SUMS' --dir "$download_dir")
+        if [ "$SWIFTPKG_VERSION" = "latest" ]; then
+          gh release download "${args[@]}"
+        else
+          gh release download "$SWIFTPKG_VERSION" "${args[@]}"
+        fi
+        # Require exactly one matching asset, so an ambiguous release can't cause
+        # a surprising package to be installed as root.
+        shopt -s nullglob
+        pkgs=("$download_dir"/swiftpkg-*-cli.pkg)
+        if [ "${#pkgs[@]}" -ne 1 ]; then
+          echo "Expected exactly one swiftpkg installer, found ${#pkgs[@]}: ${pkgs[*]:-none}" >&2
+          exit 1
+        fi
+        pkg="${pkgs[0]}"
+
+        # Three checks, each covering what the others cannot. Only the caller's
+        # own swiftpkg-sha256 pins the bytes against a release asset being
+        # replaced in place; SHA256SUMS ships from the same release, so it
+        # catches a truncated or corrupted download but moves with the release;
+        # and the signature is what makes a substituted asset unusable, since
+        # forging it requires the publisher's Developer ID certificate.
+        actual="$(shasum -a 256 "$pkg" | awk '{print $1}')"
+        if [ -n "$SWIFTPKG_SHA256" ] && [ "$actual" != "$SWIFTPKG_SHA256" ]; then
+          echo "Installer SHA-256 does not match swiftpkg-sha256: expected $SWIFTPKG_SHA256, got $actual" >&2
+          exit 1
+        fi
+        published="$(awk -v name="$(basename "$pkg")" '$2 == name { print $1 }' "$download_dir/SHA256SUMS")"
+        if [ -z "$published" ]; then
+          echo "SHA256SUMS has no entry for $(basename "$pkg")" >&2
+          exit 1
+        fi
+        if [ "$actual" != "$published" ]; then
+          echo "Installer SHA-256 does not match SHA256SUMS: expected $published, got $actual" >&2
+          exit 1
+        fi
+
+        # Assess before running the installer as root. spctl establishes that
+        # Apple notarized it; the Team ID establishes who signed it, which
+        # notarization alone does not.
+        signature="$(pkgutil --check-signature "$pkg")"
+        printf '%s\n' "$signature"
+        case "$signature" in
+          *"($EXPECTED_TEAM_ID)"*) ;;
+          *) echo "Installer is not signed by Team ID $EXPECTED_TEAM_ID" >&2; exit 1 ;;
+        esac
+        spctl --assess --type install -vv "$pkg"
+
+        sudo installer -pkg "$pkg" -target /
+
+        # BEGIN SWIFTPKG_COMPATIBILITY_CONTRACT
+        # Keep this check immediately after installation. A release can pass
+        # the installer checks and still predate the flags used below.
+        version_at_least() {
+          local actual="$1"
+          local required="$2"
+          local actual_major actual_minor actual_patch actual_tail
+          local required_major required_minor required_patch required_tail
+
+          case "$actual" in
+            *.*.*) ;;
+            *) return 1 ;;
+          esac
+          actual_major="${actual%%.*}"
+          actual_tail="${actual#*.}"
+          actual_minor="${actual_tail%%.*}"
+          actual_patch="${actual_tail#*.}"
+          case "$actual_patch" in
+            ''|*.*) return 1 ;;
+          esac
+
+          case "$required" in
+            *.*.*) ;;
+            *) return 1 ;;
+          esac
+          required_major="${required%%.*}"
+          required_tail="${required#*.}"
+          required_minor="${required_tail%%.*}"
+          required_patch="${required_tail#*.}"
+          case "$required_patch" in
+            ''|*.*) return 1 ;;
+          esac
+
+          for component in \
+            "$actual_major" "$actual_minor" "$actual_patch" \
+            "$required_major" "$required_minor" "$required_patch"; do
+            case "$component" in
+              ''|*[!0-9]*) return 1 ;;
+            esac
+          done
+
+          if [ "$actual_major" -lt "$required_major" ] ||
+             { [ "$actual_major" -eq "$required_major" ] && [ "$actual_minor" -lt "$required_minor" ]; } ||
+             { [ "$actual_major" -eq "$required_major" ] && [ "$actual_minor" -eq "$required_minor" ] && [ "$actual_patch" -lt "$required_patch" ]; }; then
+            return 1
+          fi
+        }
+
+        require_compatible_swiftpkg() {
+          local required_version='0.4.0'
+          local installed_version help missing option
+          local required_options=(
+            '--output-format'
+            '--output-dir'
+            '--pkg-version'
+            '--lint'
+            '--verify'
+            '--provenance'
+          )
+
+          if ! installed_version="$(swiftpkg --version 2>&1)"; then
+            echo "swiftpkg compatibility check failed: could not run swiftpkg --version." >&2
+            exit 1
+          fi
+          if ! version_at_least "$installed_version" "$required_version"; then
+            echo "swiftpkg $installed_version is incompatible with this CI template; requires swiftpkg >= $required_version (the release must provide --output-format, --output-dir, --pkg-version, --lint, --verify, and --provenance)." >&2
+            exit 1
+          fi
+          if ! help="$(swiftpkg --help 2>&1)"; then
+            echo "swiftpkg $installed_version is incompatible with this CI template: swiftpkg --help could not be read." >&2
+            exit 1
+          fi
+
+          missing=''
+          for option in "${required_options[@]}"; do
+            if ! grep -Fq -- "$option" <<< "$help"; then
+              if [ -n "$missing" ]; then missing="$missing, "; fi
+              missing="$missing$option"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "swiftpkg $installed_version is incompatible with this CI template: missing required option(s): $missing. Install swiftpkg >= $required_version." >&2
+            exit 1
+          fi
+          echo "Using swiftpkg $installed_version (CI contract requires >= $required_version)."
+        }
+
+        require_compatible_swiftpkg
+        # END SWIFTPKG_COMPATIBILITY_CONTRACT
+        # END SWIFTPKG_INSTALL_CONTRACT
+
+    - name: Lint
+      if: ${{ inputs.lint == 'true' }}
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+      run: swiftpkg --lint "$PROJECT_PATH"
+
+    - name: Build
+      id: build
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+        PKG_VERSION: ${{ inputs.version }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        DO_VERIFY: ${{ inputs.verify }}
+        DO_PROVENANCE: ${{ inputs.provenance }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        # BEGIN SWIFTPKG_BUILD_CONTRACT
+        set -euo pipefail
+        # extra-args first so the action's required flags (json output,
+        # output-dir) always win and can't be overridden into a shape that
+        # breaks jq parsing.
+        args=()
+        if [ -n "$EXTRA_ARGS" ]; then
+          read -ra extra <<< "$EXTRA_ARGS"
+          args+=("${extra[@]}")
+        fi
+        args+=(--output-format json --output-dir "$OUTPUT_DIR")
+        if [ -n "$PKG_VERSION" ]; then
+          args+=(--pkg-version "$PKG_VERSION")
+        fi
+        if [ "$DO_VERIFY" = "true" ]; then
+          args+=(--verify)
+        fi
+        if [ "$DO_PROVENANCE" = "true" ]; then
+          args+=(--provenance)
+        fi
+        result="$(swiftpkg "${args[@]}" "$PROJECT_PATH")"
+        echo "$result"
+        manifest_value() {
+          local key="$1"
+          printf '%s' "$result" | jq -er --arg key "$key" \
+            '.[$key] | select(type == "string") | select(length > 0) | select((contains("\r") | not) and (contains("\n") | not))'
+        }
+        pkg_path="$(manifest_value pkg_path)"
+        version="$(manifest_value version)"
+        sha256="$(manifest_value sha256)"
+        printf 'pkg-path=%s\n' "$pkg_path" >> "$GITHUB_OUTPUT"
+        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+        printf 'sha256=%s\n' "$sha256" >> "$GITHUB_OUTPUT"
+        # END SWIFTPKG_BUILD_CONTRACT
